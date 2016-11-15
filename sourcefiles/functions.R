@@ -1,17 +1,3 @@
-subset_data <- function(list, ...) {
-  #extract data from the list
-  metadata <- list$metadata
-  otutable <- list$otutable
-  
-  #subset metadata based on ... and only keep columns in otutable matching the rows in the subsetted metadata
-  newmetadata <- subset(metadata, ...)
-  newotutable <- otutable[, rownames(newmetadata), drop=FALSE]
-  
-  #return a new list
-  newlist <- list(otutable = newotutable, metadata = newmetadata)
-  return(newlist)
-}
-
 amp_load <- function(otutable, metadata, rarefy = NULL){
   # Remove whitespace from the otutable as this will break the structure of the taxonomy
   trim <- function (x) gsub("^\\s+|\\s+$", "", x)

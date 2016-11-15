@@ -1,4 +1,5 @@
 ######### for UI #########
+#siderbarpanel
 plot_sbp <- sidebarPanel(
   width = 3,
   position = "left",
@@ -37,7 +38,10 @@ plot_sbp <- sidebarPanel(
                 min = 0,
                 max = 20,
                 value = 5
-    )
+    ),
+    checkboxInput(inputId = "PCA_showstats",
+                  label = "Show statistics",
+                  value = FALSE)
   ),
   conditionalPanel(
     condition = "input.plot_type == 'Rank Abundance'",
@@ -64,11 +68,27 @@ plot_sbp <- sidebarPanel(
   downloadButton("saveplot", "Save plot")
 )
 
+#mainpanel
 plot_mp <- mainPanel(
   width = 9,
   tabsetPanel(id = "plot_type",
-              tabPanel("Heatmap", plotOutput("heatmap", height = 600)),
-              tabPanel("Rank Abundance", plotOutput("RA", height = 600)),
-              tabPanel("PCA", plotOutput("PCA", height = 600), tags$hr(), h4("Statistics"), verbatimTextOutput("pca_stats"))
+              tabPanel("Heatmap", 
+                       conditionalPanel(condition="$('html').hasClass('shiny-busy')",
+                                        tags$div("Loading...")),
+                       plotOutput("heatmap", height = 600)),
+              tabPanel("Rank Abundance", 
+                       conditionalPanel(condition="$('html').hasClass('shiny-busy')",
+                                        tags$div("Loading...")),
+                       plotOutput("RA", height = 600)),
+              tabPanel("Principal Component Analysis (PCA)", 
+                       conditionalPanel(condition="$('html').hasClass('shiny-busy')",
+                                        tags$div("Loading...")),
+                       plotOutput("PCA", height = 600), 
+                       conditionalPanel(
+                         condition = "input.PCA_showstats",
+                       tags$hr(), 
+                       h4("Statistics"), 
+                       verbatimTextOutput("pca_stats"))
+              )
               )
 )

@@ -1,4 +1,6 @@
 ######### for UI #########
+
+#sidebarpanel
 choosedata_sbp <- sidebarPanel(
   position = "left",
   width = 3,
@@ -41,6 +43,7 @@ choosedata_sbp <- sidebarPanel(
   )
 )
 
+#mainpanel
 choosedata_mp <- mainPanel(
   width = 9,
   tabsetPanel(
@@ -50,7 +53,7 @@ choosedata_mp <- mainPanel(
              ),
     tabPanel("Info",
              h4("Filtering"),
-             p("You can filter your data by searching a column or multiple columns in your metadata and the resulting rows will be used for plotting. Your metadata must contain variables in columns and sample ID's in rows. If your dataset is large you can choose which columns to show and drag-and-drop columns to reorder them. The MiDAS example data is a large dataset with many samples, some filtering i neccessary or the plots will be slow.")
+             p("You can filter your data by searching a column or multiple columns in your metadata and the resulting rows will be used for plotting. Your metadata must contain variables in columns and sample ID's in rows. If your dataset is large you can choose which columns to show and drag-and-drop columns to reorder them. The MiDAS example data is a large dataset with many samples, some filtering is neccessary or the plots will be slow.")
              )
   )
 )

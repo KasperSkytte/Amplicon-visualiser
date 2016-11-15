@@ -29,10 +29,12 @@ navbarPage(
   title = h4(a(href="javascript:history.go(0)", style="color:#606060", "Amplicon Visualiser")),
   tabPanel("Choose data", choosedata_sbp, choosedata_mp),
   tabPanel("Plots", plot_sbp, plot_mp),
-  navbarMenu("More",
-             tabPanel("About", h4("blah")),
-             tabPanel("test")
-             ),
-  collapsible = TRUE,
+  #navbarMenu("More",
+  #           tabPanel("About", 
+  #                    h4("About"),
+  #                    p("Made by Kasper Skytte Andersen, contact: knaldhat@gmail.com")
+  #                    )
+  #           ),
+  #collapsible = TRUE,
   windowTitle = "Amplicon Visualiser"
 )
