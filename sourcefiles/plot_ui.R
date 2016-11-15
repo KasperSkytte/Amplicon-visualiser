@@ -25,7 +25,7 @@ plot_sbp <- sidebarPanel(
     )
   ),
   conditionalPanel(
-    condition = "input.plot_type == 'PCA'",
+    condition = "input.plot_type == 'Principal Component Analysis (PCA)'",
     uiOutput("PCA_UI_group"),
     uiOutput("PCA_UI_shape"),
     radioButtons(inputId = "pca_plot_group",
