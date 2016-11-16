@@ -4,7 +4,7 @@ loaded_data <- reactive({
     objectNames <- load("MiDAS_1.20.RData")
     loadedObjects <- mget(objectNames)
     loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata)
-    } else if(input$chosendata == "Upload your own" & input$upl_type == "One file (.RData)") {
+    } else if(input$chosendata == "Upload data" & input$upl_type == "One file (.RData)") {
     file <- input$upl_rdata
     
     #HALT if the 3 files are not uploaded!
@@ -14,7 +14,7 @@ loaded_data <- reactive({
     objectNames <- load(file = file$datapath)
     loadedObjects <- mget(objectNames)
     loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata)
-  } else if(input$chosendata == "Upload your own" & input$upl_type == "Two files (metadata and otutable)") {
+  } else if(input$chosendata == "Upload data" & input$upl_type == "Two files (metadata and otutable)") {
     file_otutable <- input$upl_otutable
     file_metadata <- input$upl_metadata
     
@@ -35,7 +35,11 @@ loaded_data <- reactive({
     
     loadedObjects <- amp_load(otutable, metadata)
   } else return(NULL)
-  return(loadedObjects)
+  
+  #Check if the sample ID's match eachother in otutable and metadata, else return an error
+  if (all(rownames(loadedObjects$metadata) == colnames(loadedObjects$otutable)[1:nrow(loadedObjects$metadata)])) {
+    return(loadedObjects)
+  } else stop("The sample names in metadata do not match those in otutable")
 })
 
 ################## Data table and subsetting ##################

@@ -7,11 +7,11 @@ choosedata_sbp <- sidebarPanel(
   h4("Choose data"),
   radioButtons(inputId = "chosendata",
                label = "",
-               choices = c("MiDAS example data", "Upload your own"),
+               choices = c("MiDAS example data", "Upload data"),
                selected = "MiDAS example data"
   ),
   conditionalPanel(
-    condition = "input.chosendata == 'Upload your own'",
+    condition = "input.chosendata == 'Upload data'",
     tags$hr(),
     h4("Upload data"),
     radioButtons(inputId = "upl_type",
