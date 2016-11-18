@@ -13,11 +13,7 @@ plot_sbp <- sidebarPanel(
                   value = FALSE),
     conditionalPanel(
       condition = "input.heatmap_moreoptions",
-      checkboxGroupInput(inputId = "heatmap_tax.add",
-                         label = "Extra taxonomic information:",
-                         choices = c("Class", "Order", "Family", "Species"),
-                         selected = NULL
-      ),
+      uiOutput("heatmap_UI_tax.add"),
       selectInput(inputId = "heatmap_tax.aggregate",
                   label = "Taxa aggregate level:",
                   choices = c("Class", "Order", "Family", "Genus", "Species"),
@@ -42,6 +38,15 @@ plot_sbp <- sidebarPanel(
                     label = "Plot numbers", 
                     value = TRUE
       )
+    ),
+    tags$hr(),
+    conditionalPanel(
+      condition = "!$('html').hasClass('shiny-busy')",
+      actionButton("renderplot_heatmap", "Render plot")
+    ),
+    conditionalPanel(
+      condition = "$('html').hasClass('shiny-busy')",
+      p("Loading...")
     )
   ),
   ################## PCA ##################
@@ -69,6 +74,15 @@ plot_sbp <- sidebarPanel(
       #checkboxInput(inputId = "PCA_showstats",
       #              label = "Show statistics",
       #              value = FALSE)
+    ),
+    tags$hr(),
+    conditionalPanel(
+      condition = "!$('html').hasClass('shiny-busy')",
+      actionButton("renderplot_PCA", "Render plot")
+    ),
+    conditionalPanel(
+      condition = "$('html').hasClass('shiny-busy')",
+      p("Loading...")
     )
   ),
   ################## Rank Abundance ##################
@@ -95,10 +109,17 @@ plot_sbp <- sidebarPanel(
       checkboxInput(inputId = "RA_flip",
                     label = "Flip axes",
                     value = FALSE)
-      )
+      ),
+    tags$hr(),
+    conditionalPanel(
+      condition = "!$('html').hasClass('shiny-busy')",
+      actionButton("renderplot_RA", "Render plot")
     ),
-  tags$hr(),
-  actionButton("goplot", "Render plot"),
+    conditionalPanel(
+      condition = "$('html').hasClass('shiny-busy')",
+      p("Loading...")
+    )
+    ),
   tags$hr(),
   downloadButton("saveplot", "Save plot")
 )
@@ -107,17 +128,9 @@ plot_sbp <- sidebarPanel(
 plot_mp <- mainPanel(
   width = 9,
   tabsetPanel(id = "plot_type",
-              tabPanel("Heatmap", 
-                       conditionalPanel(condition="$('html').hasClass('shiny-busy')",
-                                        tags$div("Loading...")),
-                       plotOutput("heatmap", height = 600)),
-              tabPanel("Rank Abundance", 
-                       conditionalPanel(condition="$('html').hasClass('shiny-busy')",
-                                        tags$div("Loading...")),
-                       plotOutput("RA", height = 600)),
+              tabPanel("Heatmap", plotOutput("heatmap", height = 600)),
+              tabPanel("Rank Abundance", plotOutput("RA", height = 600)),
               tabPanel("Principal Component Analysis (PCA)", 
-                       conditionalPanel(condition="$('html').hasClass('shiny-busy')",
-                                        tags$div("Loading...")),
                        plotOutput("PCA", height = 600), 
                        conditionalPanel(
                          condition = "input.PCA_showstats",

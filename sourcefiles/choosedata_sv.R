@@ -7,18 +7,24 @@ loaded_data <- reactive({
     } else if(input$chosendata == "Upload data" & input$upl_type == "One file (.RData)") {
     file <- input$upl_rdata
     
-    #HALT if the 3 files are not uploaded!
+    #HALT if the file is not uploaded!
     if (is.null(file))
       return(NULL)
     
     objectNames <- load(file = file$datapath)
     loadedObjects <- mget(objectNames)
+    if(!any(names(loadedObjects) == "metadata") | 
+       !any(names(loadedObjects) == "otutable") | 
+       !is.data.frame(loadedObjects[["metadata"]]) | 
+       !is.data.frame(loadedObjects[["otutable"]])) {
+      stop("The .RData file must contain two dataframes with the exact names: 'otutable' and 'metadata'")
+    }
     loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata)
   } else if(input$chosendata == "Upload data" & input$upl_type == "Two files (metadata and otutable)") {
     file_otutable <- input$upl_otutable
     file_metadata <- input$upl_metadata
     
-    #HALT if the 3 files are not uploaded!
+    #HALT if the 2 files are not uploaded!
     if (is.null(file_otutable) | is.null(file_metadata))
       return(NULL)
     
@@ -36,10 +42,8 @@ loaded_data <- reactive({
     loadedObjects <- amp_load(otutable, metadata)
   } else return(NULL)
   
-  #Check if the sample ID's match eachother in otutable and metadata, else return an error
-  if (all(rownames(loadedObjects$metadata) == colnames(loadedObjects$otutable)[1:nrow(loadedObjects$metadata)])) {
-    return(loadedObjects)
-  } else stop("The sample names in metadata do not match those in otutable")
+  #return the loaded data list
+  return(loadedObjects)
 })
 
 ################## Data table and subsetting ##################
@@ -66,8 +70,8 @@ loaded_data_subset <- reactive({
   d <- loaded_data()
   # Subset data based on input from the datatable
   newmetadata <- d$metadata[c(input$datatable_rows_all), , drop = FALSE]
-  newotutable <- cbind(d$otutable[, rownames(newmetadata), drop=FALSE], d$otutable[, (ncol(d$otutable) - 6):ncol(d$otutable)])
+  newabund <- d$abund[, rownames(newmetadata), drop=FALSE]
   #return a new list
-  newlist <- list(otutable = newotutable, metadata = newmetadata)
+  newlist <- list(abund = newabund, tax = d$tax, metadata = newmetadata)
   return(newlist)
 })

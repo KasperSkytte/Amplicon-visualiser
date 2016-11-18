@@ -2,18 +2,39 @@ data_variables <- reactive({
   colnames(loaded_data_subset()[["metadata"]])
 })
 
+data_variables_selected <- reactive({
+  if(input$chosendata == "MiDAS example data") {
+    data_variables()[2]
+  } else {
+    data_variables()[1]
+  }
+})
+
+
 ################## Heatmap ##################
 output$heatmap_UI_tax.group <- renderUI({
-  selectizeInput(inputId = "heatmap_tax.group",
-                 label = "Choose grouping: ",
-                 choices = data_variables(),
-                 selected = data_variables()[1],
-                 multiple = TRUE
-                 #,options = list(maxItems = 2)
+  selectizeInput(
+    inputId = "heatmap_tax.group",
+    label = "Choose grouping: ",
+    choices = data_variables(),
+    selected = data_variables_selected(),
+    multiple = TRUE
+    #,options = list(maxItems = 2)
   )
 })
 
-plot_heatmap <- eventReactive(input$goplot, {
+#subtract the chosen tax.aggregate input from tax.add input, because an error occurs if the same is chosen 
+output$heatmap_UI_tax.add <- renderUI({
+  taxvector <- c(Class = "Class", Order = "Order", Family = "Family", Genus = "Genus", Species = "Species")
+  checkboxGroupInput(
+    inputId = "heatmap_tax.add",
+    label = "Extra taxonomic information:",
+    choices = taxvector[!taxvector %in% c(input$heatmap_tax.aggregate)],
+    selected = NULL
+ )
+})
+
+plot_heatmap <- eventReactive(input$renderplot_heatmap, {
   if(is.null(input$heatmap_tax.group)) return(NULL)
   order_x <- if(input$heatmap_cluster_x) {"cluster"}
   order_y <- if(input$heatmap_cluster_y) {"cluster"}
@@ -41,14 +62,16 @@ output$heatmap <- renderPlot({
 
 ################## Rank Abundance ##################
 output$RA_UI_group <- renderUI({
-  selectInput(inputId = "RA_group",
-              label = "Select group variable: ",
-              choices = data_variables()
+  selectInput(
+    inputId = "RA_group",
+    label = "Select group variable: ",
+    choices = data_variables(),
+    selected = data_variables_selected()
   )
 })
 
 
-plot_RA <- eventReactive(input$goplot ,{
+plot_RA <- eventReactive(input$renderplot_RA ,{
   if(is.null(input$RA_group)) return(NULL)
   amp_rabund(loaded_data_subset(),
              tax.aggregate = "Genus",
@@ -71,11 +94,11 @@ output$PCA_UI_group <- renderUI({
     inputId = "pca_group",
     label = "Select group variable: ",
     choices = data_variables(),
-    selected = data_variables()[1]
+    selected = data_variables_selected()
   )
 })
 
-plot_PCA <- eventReactive(input$goplot, {
+plot_PCA <- eventReactive(input$renderplot_PCA, {
   #A group is a must
   if(is.null(input$pca_group)) return(NULL)
   
