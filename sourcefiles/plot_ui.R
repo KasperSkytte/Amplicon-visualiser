@@ -3,7 +3,7 @@
 plot_sbp <- sidebarPanel(
   width = 3,
   position = "left",
-  h4("Options: "),
+  h4("Options"),
   ################## Heatmap ##################
   conditionalPanel(
     condition = "input.plot_type == 'Heatmap'",
@@ -15,7 +15,7 @@ plot_sbp <- sidebarPanel(
       condition = "input.heatmap_moreoptions",
       uiOutput("heatmap_UI_tax.add"),
       selectInput(inputId = "heatmap_tax.aggregate",
-                  label = "Taxa aggregate level:",
+                  label = "Taxa aggregate level",
                   choices = c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU"),
                   selected = "Genus"
       ),
@@ -28,7 +28,7 @@ plot_sbp <- sidebarPanel(
                     value = FALSE
                     ),
       sliderInput(inputId = "heatmap_tax.show",
-                  label = "Number of taxa to show:",
+                  label = "Number of taxa to show",
                   min = 1,
                   max = 50,
                   value = 20,
@@ -58,11 +58,20 @@ plot_sbp <- sidebarPanel(
                   value = FALSE),
     conditionalPanel(
       condition = "input.PCA_moreoptions",
-      #uiOutput("PCA_UI_trajectory"),
-      radioButtons(inputId = "PCA_plot_group",
-                   label = "Display group as",
-                   choices = c(Chull = "chull", Centroid = "centroid"),
-                   selected = "chull"
+      numericInput(inputId = "PCA_filterlowabund",
+                   label = "Minimum OTU threshold in all samples(%)",
+                   value = 0.1,
+                   min = 0.01,
+                   max = 10,
+                   step = 0.01
+      ),
+      conditionalPanel(
+        condition = "!input.PCA_trajectory",
+        radioButtons(inputId = "PCA_plot_group",
+                     label = "Color group as",
+                     choices = c(Chull = "chull", Centroid = "centroid"),
+                     selected = "chull"
+        )
       ),
       sliderInput(inputId = "PCA_plot_nspecies",
                   label = "Number of taxa to plot",
@@ -70,6 +79,13 @@ plot_sbp <- sidebarPanel(
                   max = 20,
                   value = 0,
                   step = 1
+      ),
+      checkboxInput(inputId = "PCA_trajectory",
+                    label = "Trajectory",
+                    value = FALSE),
+      conditionalPanel(
+        condition = "input.PCA_trajectory",
+        uiOutput("PCA_UI_trajectory")
       ),
       checkboxInput(inputId = "PCA_constrain",
                     label = "Constrain",
@@ -109,12 +125,12 @@ plot_sbp <- sidebarPanel(
     conditionalPanel(
       condition = "input.RA_moreoptions",
       checkboxGroupInput(inputId = "RA_tax.add",
-                         label = "Extra taxonomic information:",
+                         label = "Extra taxonomic information",
                          choices = c("Phylum", "Class", "Order", "Family", "Species"),
                          selected = NULL
       ),
       sliderInput(inputId = "RA_tax.show",
-                  label = "Number of taxa to show:",
+                  label = "Number of taxa to show",
                   min = 1,
                   max = 50,
                   value = 10,

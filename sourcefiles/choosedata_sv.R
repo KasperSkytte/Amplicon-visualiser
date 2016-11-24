@@ -19,7 +19,7 @@ loaded_data <- reactive({
        !is.data.frame(loadedObjects[["otutable"]])) {
       stop("The .RData file must contain two dataframes with the exact names: 'otutable' and 'metadata'")
     }
-    loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata)
+    loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata, percent = TRUE)
   } else if(input$chosendata == "Upload data" & input$upl_type == "Two files (metadata and otutable)") {
     file_otutable <- input$upl_otutable
     file_metadata <- input$upl_metadata
@@ -29,17 +29,19 @@ loaded_data <- reactive({
       return(NULL)
     
     #load otutable
-    otutable <- read.delim(file_otutable$datapath, sep = "\t", header = TRUE, check.names = FALSE, row.names = 1) #OTU table
+    otutable <- read.delim(file_otutable$datapath, sep = "\t", header = TRUE, check.names = FALSE, row.names = 1)
     
     #load metadata
     ext <- tools::file_ext(file_metadata$name)
     if(ext == "xlsx" | ext == "xls") {
-    file.rename(file_metadata$datapath,
-                paste(file_metadata$datapath, ext, sep="."))
-    metadata <- as.data.frame(read_excel(paste(file_metadata$datapath, ext, sep=".")))
-    } else stop("Currently only supports metadata from Excel files")
+      file.rename(file_metadata$datapath,
+                  paste(file_metadata$datapath, ext, sep="."))
+      metadata <- as.data.frame(read_excel(paste(file_metadata$datapath, ext, sep=".")), na = "")
+    } else if(ext == "csv" | ext == "txt") {
+      metadata <- read.delim(file_metadata$datapath, sep = "\t", header = TRUE, check.names = TRUE)
+    } else stop("Currently only supports metadata from Microsoft Excel files and .csv files")
     
-    loadedObjects <- amp_load(otutable, metadata)
+    loadedObjects <- amp_load(otutable, metadata, percent = TRUE)
   } else return(NULL)
   
   #return the loaded data list
