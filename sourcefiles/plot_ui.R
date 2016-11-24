@@ -16,7 +16,7 @@ plot_sbp <- sidebarPanel(
       uiOutput("heatmap_UI_tax.add"),
       selectInput(inputId = "heatmap_tax.aggregate",
                   label = "Taxa aggregate level:",
-                  choices = c("Class", "Order", "Family", "Genus", "Species"),
+                  choices = c("Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU"),
                   selected = "Genus"
       ),
       checkboxInput(inputId = "heatmap_cluster_x",
@@ -53,27 +53,41 @@ plot_sbp <- sidebarPanel(
   conditionalPanel(
     condition = "input.plot_type == 'Principal Component Analysis (PCA)'",
     uiOutput("PCA_UI_group"),
-    checkboxInput(inputId = "pca_moreoptions",
+    checkboxInput(inputId = "PCA_moreoptions",
                   label = "More options",
                   value = FALSE),
     conditionalPanel(
-      condition = "input.pca_moreoptions",
-      radioButtons(inputId = "pca_plot_group",
+      condition = "input.PCA_moreoptions",
+      #uiOutput("PCA_UI_trajectory"),
+      radioButtons(inputId = "PCA_plot_group",
                    label = "Display group as",
                    choices = c(Chull = "chull", Centroid = "centroid"),
                    selected = "chull"
       ),
-      sliderInput(inputId = "pca_plot_nspecies",
+      sliderInput(inputId = "PCA_plot_nspecies",
                   label = "Number of taxa to plot",
                   min = 0,
                   max = 20,
                   value = 0,
                   step = 1
       ),
-      uiOutput("PCA_UI_shape")
-      #checkboxInput(inputId = "PCA_showstats",
-      #              label = "Show statistics",
-      #              value = FALSE)
+      checkboxInput(inputId = "PCA_constrain",
+                    label = "Constrain",
+                    value = FALSE
+      ),
+      conditionalPanel(
+        condition = "input.PCA_constrain",
+        numericInput(inputId = "PCA_envfitslvl",
+                  label = "Significance level",
+                  value = 0.001,
+                  min = 0.001,
+                  max = 1,
+                  step = 0.001
+                  ),
+        checkboxInput(inputId = "PCA_showstats",
+                      label = "Show statistics",
+                      value = FALSE)
+      )
     ),
     tags$hr(),
     conditionalPanel(
@@ -96,7 +110,7 @@ plot_sbp <- sidebarPanel(
       condition = "input.RA_moreoptions",
       checkboxGroupInput(inputId = "RA_tax.add",
                          label = "Extra taxonomic information:",
-                         choices = c("Class", "Order", "Family", "Species"),
+                         choices = c("Phylum", "Class", "Order", "Family", "Species"),
                          selected = NULL
       ),
       sliderInput(inputId = "RA_tax.show",
@@ -136,7 +150,7 @@ plot_mp <- mainPanel(
                          condition = "input.PCA_showstats",
                        tags$hr(), 
                        h4("Statistics"), 
-                       verbatimTextOutput("pca_stats"))
+                       verbatimTextOutput("PCA_stats"))
               )
               )
 )

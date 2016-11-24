@@ -1,14 +1,14 @@
 amp_subset <- function(list, ...) {
   #Check the data first
   if(!is.list(list) | 
-     !any(names(list) == "metadata") | 
      !any(names(list) == "abund") | 
      !any(names(list) == "tax") | 
-     !is.data.frame(list[["metadata"]]) | 
+     !any(names(list) == "metadata") | 
      !is.data.frame(list[["abund"]]) |
-     !is.data.frame(list[["tax"]])
+     !is.data.frame(list[["tax"]]) |
+     !is.data.frame(list[["metadata"]])
      ) {
-    stop("The data must be a list with two dataframes named otutable and metadata")
+    stop("The data must be a list with three dataframes named abund, tax and metadata")
   }
   
   #extract data from the list
@@ -25,7 +25,35 @@ amp_subset <- function(list, ...) {
   return(newlist)
 }
 
-amp_load <- function(otutable, metadata, rarefy = NULL){
+amp_subset_taxa <- function(list, ...) {
+  #Check the data first
+  if(!is.list(list) | 
+     !any(names(list) == "abund") | 
+     !any(names(list) == "tax") | 
+     !any(names(list) == "metadata") | 
+     !is.data.frame(list[["abund"]]) |
+     !is.data.frame(list[["tax"]]) |
+     !is.data.frame(list[["metadata"]])
+  ) {
+    stop("The data must be a list with three dataframes named abund, tax and metadata")
+  }
+  
+  #extract data from the list
+  metadata <- list$metadata
+  abund <- list$abund
+  tax <- list$tax
+  
+  #subset tax table based on ... and only keep rows in abund and metadata matching the rows in the subsetted tax table
+  newtax <- subset(tax, ...)
+  newabund <- abund[rownames(newtax), , drop=FALSE]
+  newmetadata <- metadata[colnames(newabund), , drop=FALSE]
+  
+  #return a new list
+  newlist <- list(abund = newabund, tax = newtax, metadata = newmetadata)
+  return(newlist)
+}
+
+amp_load <- function(otutable, metadata, rarefy = NULL, percent = FALSE){
   # Remove whitespace from the otutable as this will break the structure of the taxonomy
   trim <- function (x) gsub("^\\s+|\\s+$", "", x)
   otutable$Kingdom<-trim(as.character(otutable$Kingdom))
@@ -44,6 +72,10 @@ amp_load <- function(otutable, metadata, rarefy = NULL){
   #abund: all columns from otutable except the last 7 to numeric and order rows by rownames:
   abund <- as.data.frame(otutable[,1:(ncol(otutable) - 7)])/1
   abund <- abund[order(rownames(abund)),order(colnames(abund))]
+  #abundances to percent
+  if(percent == TRUE) {
+    abund <- as.data.frame(sapply(abund, function(x) x/sum(x)*100))
+  }
   
   #tax: the last 7 columns from otutable to factor, order rows by rownames and order columns by taxonomic rank(not alphabetically)
   tax <- data.frame(otutable[, (ncol(otutable) - 6):ncol(otutable)] %>% transform(as.factor) 
@@ -56,14 +88,14 @@ amp_load <- function(otutable, metadata, rarefy = NULL){
   #rarefy function
   #  if(!is.null(rarefy)){data <- rarefy_even_depth(data, sample.size = rarefy, rngseed = 712)}metadata <- metadata[order(rownames(metadata)), ]
   
-  #check if metadata and otutable match, else return error
-  if(!all(rownames(data$metadata) == colnames(data$abund))) {
+  #check if metadata and otutable match
+  if(!all(rownames(data$metadata) %in% colnames(data$abund))) {
     stop("The sample names in metadata do not match those in otutable")
   }
   return(data)
 }
 
-amp_heatmap <- function(data, group = "Sample", normalise = NULL, scale = NULL, percent = TRUE, tax.aggregate = "Phylum", tax.add = NULL, tax.show = 10, tax.class = NULL, tax.empty = "best", order.x = NULL, order.y = NULL, plot.numbers = T, plot.breaks = NULL, plot.colorscale = "log10", plot.na = T, scale.seq = 100, output = "plot", plot.text.size = 4, plot.theme = "normal", calc = "mean", min.abundance = 0.1, max.abundance = NULL, sort.by = NULL, color.vector = NULL){
+amp_heatmap <- function(data, group = "Sample", normalise = NULL, scale = NULL, tax.aggregate = "Phylum", tax.add = NULL, tax.show = 10, tax.class = NULL, tax.empty = "best", order.x = NULL, order.y = NULL, plot.numbers = T, plot.breaks = NULL, plot.colorscale = "log10", plot.na = T, scale.seq = 100, output = "plot", plot.text.size = 4, plot.theme = "normal", calc = "mean", min.abundance = 0.1, max.abundance = NULL, sort.by = NULL, color.vector = NULL){
   
   ## Clean up the taxonomy
   data <- amp_rename(data = data, tax.class = tax.class, tax.empty = tax.empty, tax.level = tax.aggregate)
@@ -72,11 +104,6 @@ amp_heatmap <- function(data, group = "Sample", normalise = NULL, scale = NULL, 
   abund <- data[["abund"]]
   tax <- data[["tax"]]
   sample <- data[["metadata"]]
-  
-  ##Convert abundances to percent
-  if(percent == TRUE) {
-    abund <- as.data.frame(sapply(abund, function(x) x/sum(x)*100))
-  }
   
   ## Scale the data by a selected metadata sample variable
   if (!is.null(scale)){

@@ -49,11 +49,16 @@ choosedata_mp <- mainPanel(
   tabsetPanel(
     tabPanel("Filter data",
              tags$hr(),
-             DT::dataTableOutput("datatable")
+             DT::dataTableOutput("filtermetadata")
+             ),
+    tabPanel("Filter taxa",
+             p("Filter taxa is disabled at the moment."),
+             tags$hr(),
+             DT::dataTableOutput("filtertaxa")
              ),
     tabPanel("Info",
              h4("Filtering"),
-             p("You can filter your data by searching a column or multiple columns in your metadata and the resulting rows will be used for plotting. Your metadata must contain variables in columns and sample ID's in rows. If your dataset is large you can choose which columns to show and drag-and-drop columns to reorder them. The MiDAS example data is a large dataset with many samples, some filtering is neccessary or the plots will be slow.")
+             p("You can filter the data by searching a column or multiple columns in either the metadata or the taxonomy table and the resulting rows will be used for plotting. For example you can search for 'Aalborg West' in the Plant column and 'Tetrasphaera' in the Genus column to only show data from Aalborg West containing Tetrasphaera. The metadata must contain variables in columns and sample ID's in rows. If the dataset is large you can choose which columns to show and drag-and-drop columns to reorder them. The MiDAS example data is a large dataset with many samples, thus some filtering is neccessary or the plots will be slow.")
              )
   )
 )

@@ -25,7 +25,8 @@ output$heatmap_UI_tax.group <- renderUI({
 
 #subtract the chosen tax.aggregate input from tax.add input, because an error occurs if the same is chosen 
 output$heatmap_UI_tax.add <- renderUI({
-  taxvector <- c(Class = "Class", Order = "Order", Family = "Family", Genus = "Genus", Species = "Species")
+  taxvector <- c(Phylum = "Phylum", Class = "Class", Order = "Order", Family = "Family", Genus = "Genus", Species = "Species")
+  
   checkboxGroupInput(
     inputId = "heatmap_tax.add",
     label = "Extra taxonomic information:",
@@ -35,6 +36,7 @@ output$heatmap_UI_tax.add <- renderUI({
 })
 
 plot_heatmap <- eventReactive(input$renderplot_heatmap, {
+  #A group is a must
   if(is.null(input$heatmap_tax.group)) return(NULL)
   order_x <- if(input$heatmap_cluster_x) {"cluster"}
   order_y <- if(input$heatmap_cluster_y) {"cluster"}
@@ -72,6 +74,7 @@ output$RA_UI_group <- renderUI({
 
 
 plot_RA <- eventReactive(input$renderplot_RA ,{
+  #A group is a must
   if(is.null(input$RA_group)) return(NULL)
   amp_rabund(loaded_data_subset(),
              tax.aggregate = "Genus",
@@ -91,8 +94,17 @@ output$RA <- renderPlot({
 ################## PCA ##################
 output$PCA_UI_group <- renderUI({
   selectInput(
-    inputId = "pca_group",
+    inputId = "PCA_group",
     label = "Select group variable: ",
+    choices = data_variables(),
+    selected = data_variables_selected()
+  )
+})
+
+output$PCA_UI_trajectory <- renderUI({
+  selectInput(
+    inputId = "PCA_trajectory",
+    label = "Select trajectory variable: ",
     choices = data_variables(),
     selected = data_variables_selected()
   )
@@ -100,31 +112,43 @@ output$PCA_UI_group <- renderUI({
 
 plot_PCA <- eventReactive(input$renderplot_PCA, {
   #A group is a must
-  if(is.null(input$pca_group)) return(NULL)
+  if(is.null(input$PCA_group)) return(NULL)
   
-  #argument plot.nspecies
-  if(input$pca_plot_nspecies != 0) {
+  #arguments 
+  if(input$PCA_plot_nspecies != 0) {
     plot_species <- TRUE
-    plot_nspecies <- input$pca_plot_nspecies
-  } else if(input$pca_plot_nspecies == 0) {
+    plot_nspecies <- input$PCA_plot_nspecies
+  } else if(input$PCA_plot_nspecies == 0) {
     plot_species <- FALSE
     plot_nspecies <- NULL
   }
-
-  plot <- amp_ordinate(loaded_data_subset(),
-               output = "complete", 
-               #envfit.significant = 0.05,
-               #envfit.factor = input$pca_group,
-               plot.color = input$pca_group, 
-               plot.group = input$pca_plot_group,
-               #constrain = input$pca_group,
-               #plot.group.label = input$pca_group,
-               plot.species = plot_species,
-               plot.nspecies = plot_nspecies
-               #scale.species = TRUE
-  ) 
   
-  #output$pca_stats <- renderPrint({plot$eff.model})
+  if(input$PCA_constrain) {
+    plot <- amp_ordinate(loaded_data_subset(),
+                         output = "complete", 
+                         envfit.significant = input$PCA_envfitslvl,
+                         envfit.factor = input$PCA_group,
+                         plot.color = input$PCA_group, 
+                         plot.group = input$PCA_plot_group,
+                         constrain = input$PCA_group,
+                         #plot.group.label = input$PCA_group,
+                         plot.species = plot_species,
+                         plot.nspecies = plot_nspecies
+                         #scale.species = TRUE
+    ) 
+  } else {
+    plot <- amp_ordinate(loaded_data_subset(),
+                         output = "complete", 
+                         trajectory = input$PCA_trajectory,
+                         plot.color = input$PCA_group, 
+                         plot.group = input$PCA_plot_group,
+                         #plot.group.label = input$PCA_group,
+                         plot.species = plot_species,
+                         plot.nspecies = plot_nspecies
+                         #scale.species = TRUE
+    ) 
+  } 
+  output$PCA_stats <- renderPrint({plot$eff.model})
   plot$plot + theme_light() 
 })
   

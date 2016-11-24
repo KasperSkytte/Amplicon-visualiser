@@ -43,11 +43,12 @@ loaded_data <- reactive({
   } else return(NULL)
   
   #return the loaded data list
+  #loadedObjects <- amp_rename(loadedObjects)
   return(loadedObjects)
 })
 
-################## Data table and subsetting ##################
-output$datatable <- DT::renderDataTable(
+################## Data tables and subsetting ##################
+output$filtermetadata <- DT::renderDataTable(
   loaded_data()$metadata,
   server = TRUE,
   filter = "top",
@@ -66,11 +67,32 @@ output$datatable <- DT::renderDataTable(
                  )
   )
 
+output$filtertaxa <- DT::renderDataTable(
+  loaded_data()$tax,
+  server = TRUE,
+  filter = "top",
+  extensions = c("ColReorder", "Buttons"),
+  rownames = FALSE,
+  #selection = list(target = 'row+column'),
+  selection = "none", 
+  options = list(pageLength = 10,
+                 dom = "Bfrtip",
+                 buttons = I("colvis"),
+                 autoWidth = TRUE,
+                 scrollX = TRUE,
+                 lengthMenu = c(5, 10, 25, 50, 100),
+                 colReorder = TRUE,
+                 columnDefs = list(list(width = '125px', targets = "_all"))
+  )
+)
+
 loaded_data_subset <- reactive({
   d <- loaded_data()
   # Subset data based on input from the datatable
-  newmetadata <- d$metadata[c(input$datatable_rows_all), , drop = FALSE]
+  newmetadata <- d$metadata[c(input$filtermetadata_rows_all), , drop = FALSE]
   newabund <- d$abund[, rownames(newmetadata), drop=FALSE]
+  #newabund <- d$abund[c(input$filtertaxa_rows_all), rownames(newmetadata), drop=FALSE]
+  #newtax <- d$tax[c(input$filtertaxa_rows_all), , drop = FALSE]
   #return a new list
   newlist <- list(abund = newabund, tax = d$tax, metadata = newmetadata)
   return(newlist)
