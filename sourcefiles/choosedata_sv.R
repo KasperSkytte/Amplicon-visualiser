@@ -1,9 +1,8 @@
 ################## Load data ##################
 loaded_data <- reactive({
   if (input$chosendata == "MiDAS example data") {
-    objectNames <- load("MiDAS_1.20.RData")
-    loadedObjects <- mget(objectNames)
-    loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata)
+    load("MiDAS_1.20_subset.RData")
+    loadedObjects <- MiDAS_1.20_subset
     } else if(input$chosendata == "Upload data" & input$upl_type == "One file (.RData)") {
     file <- input$upl_rdata
     
@@ -108,6 +107,7 @@ loaded_data_subset <- reactive({
   #return a new list, the user has to click the 'filter taxa' pane to actually render the tax table and not return NULL, therefore the if():
   if(is.null(c(input$filtertaxa_rows_all))) {
     newabund <- d$abund[, rownames(newmetadata), drop=FALSE]
+    
     newlist <- list(abund = newabund, tax = d$tax, metadata = newmetadata)
   } else if(!is.null(c(input$filtertaxa_rows_all))) {
     newlist <- list(abund = newabund, tax = newtax, metadata = newmetadata)

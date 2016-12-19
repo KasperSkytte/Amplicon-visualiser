@@ -76,15 +76,28 @@ output$RA_UI_group <- renderUI({
 plot_RA <- eventReactive(input$renderplot_RA ,{
   #A group is a must
   if(is.null(input$RA_group)) return(NULL)
-  amp_rabund(loaded_data_subset(),
-             tax.aggregate = "Genus",
-             tax.show = input$RA_tax.show,
-             tax.add = input$RA_tax.add,
-             plot.flip = input$RA_flip,
-             group = input$RA_group
-  ) + theme_light() +
-    theme(axis.text.x = element_text(angle = 45, size=12, hjust = 1), 
-          axis.text.y=element_text(size=10)) 
+  
+  if(input$RA_flip) {
+    amp_rabund(loaded_data_subset(),
+               tax.aggregate = "Genus",
+               tax.show = input$RA_tax.show,
+               tax.add = input$RA_tax.add,
+               plot.flip = input$RA_flip,
+               group = input$RA_group
+    ) + theme_light() +
+      theme(axis.text.x = element_text(angle = 45, size=12, hjust = 1), 
+            axis.text.y=element_text(size=10)) 
+  } else {
+    amp_rabund(loaded_data_subset(),
+               tax.aggregate = "Genus",
+               tax.show = input$RA_tax.show,
+               tax.add = input$RA_tax.add,
+               plot.flip = input$RA_flip,
+               group = input$RA_group
+    ) + theme_light() +
+      theme(axis.text.x = element_text(angle = 0, size=12, hjust = 1), 
+            axis.text.y=element_text(size=10)) 
+  }
 })
 
 output$RA <- renderPlot({
