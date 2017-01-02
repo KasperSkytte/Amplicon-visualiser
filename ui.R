@@ -33,7 +33,7 @@ source("sourcefiles/plot_ui.R", local = FALSE)
 navbarPage(
   title = h4(a(href="javascript:history.go(0)", style="color:#606060", "Amplicon Visualiser")),
   tabPanel("Data and Filtering", choosedata_sbp, choosedata_mp),
-  tabPanel("Plots", plot_sbp, plot_mp),
+  tabPanel("Analysis", plot_sbp, plot_mp),
   #navbarMenu("More",
   #           tabPanel("About", 
   #                    h4("About"),

@@ -1,8 +1,8 @@
 ################## Load data ##################
 loaded_data <- reactive({
   if (input$chosendata == "MiDAS example data") {
-    load("MiDAS_1.20_subset.RData")
-    loadedObjects <- MiDAS_1.20_subset
+    load("MiDAS_1.21.RData")
+    loadedObjects <- MiDAS_1.21
     } else if(input$chosendata == "Upload data" & input$upl_type == "One file (.RData)") {
     file <- input$upl_rdata
     
