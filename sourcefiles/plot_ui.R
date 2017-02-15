@@ -34,6 +34,9 @@ plot_sbp <- sidebarPanel(
                   value = 20,
                   step = 1
       ),
+      textInput(inputId = "heatmap_colorvector",
+                label = "Custom color palette (logscale)",
+                value = "Deepskyblue, White, Tomato"),
       checkboxInput(inputId = "heatmap_plot.numbers",
                     label = "Plot numbers", 
                     value = TRUE

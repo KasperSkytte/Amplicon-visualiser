@@ -36,6 +36,8 @@ output$heatmap_UI_tax.add <- renderUI({
 })
 
 plot_heatmap <- eventReactive(input$renderplot_heatmap, {
+  test <<- c(input$heatmap_colorvector)
+  
   #A group is a must
   if(is.null(input$heatmap_tax.group)) return(NULL)
   order_x <- if(input$heatmap_cluster_x) {"cluster"}
@@ -51,7 +53,8 @@ plot_heatmap <- eventReactive(input$renderplot_heatmap, {
               #min.abundance = 0.1,
               tax.show = input$heatmap_tax.show,
               plot.numbers = input$heatmap_plot.numbers,
-              plot.colorscale = "log10"
+              plot.colorscale = "log10",
+              color.vector = unlist(strsplit(input$heatmap_colorvector, ","))
 ) + theme_light() +
   theme(axis.text.x = element_text(angle = 45, size=12, hjust = 1), 
         axis.text.y=element_text(size=10)) 
@@ -60,7 +63,6 @@ plot_heatmap <- eventReactive(input$renderplot_heatmap, {
 output$heatmap <- renderPlot({
   plot_heatmap()
 })
-
 
 ################## Rank Abundance ##################
 output$RA_UI_group <- renderUI({
@@ -86,7 +88,9 @@ plot_RA <- eventReactive(input$renderplot_RA ,{
                group = input$RA_group
     ) + theme_light() +
       theme(axis.text.x = element_text(angle = 45, size=12, hjust = 1), 
-            axis.text.y=element_text(size=10)) 
+            axis.text.y = element_text(size=10),
+            axis.line = element_line(colour = "black", size = 0.5)
+            ) 
   } else {
     amp_rabund(loaded_data_subset(),
                tax.aggregate = "Genus",
@@ -96,7 +100,9 @@ plot_RA <- eventReactive(input$renderplot_RA ,{
                group = input$RA_group
     ) + theme_light() +
       theme(axis.text.x = element_text(angle = 0, size=12, hjust = 1), 
-            axis.text.y=element_text(size=10)) 
+            axis.text.y=element_text(size=10),
+            axis.line = element_line(colour = "black", size = 0.5)
+            ) 
   }
 })
 
@@ -203,7 +209,8 @@ plot_PCA <- eventReactive(input$renderplot_PCA, {
     ) 
   }
   output$PCA_stats <- renderPrint({plot$eff.model})
-  plot$plot + theme_light() 
+  plot$plot + theme_minimal() +
+    theme(axis.line = element_line(colour = "black", size = 0.5)) 
 })
   
 output$PCA <- renderPlot({

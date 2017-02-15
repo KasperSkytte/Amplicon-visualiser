@@ -341,7 +341,7 @@ amp_heatmap <- function(data, group = "Sample", normalise = NULL, scale = NULL, 
   if (plot.numbers == T){
     abund8 <- abund7
     abund8$Abundance <- round(abund8$Abundance, round)
-    p <- p + geom_text(data = abund8, size = plot.text.size, colour = "grey10")  
+    p <- p + geom_text(data = abund8, size = plot.text.size, colour = "grey10", check_overlap = TRUE)
   }
   if (is.null(plot.breaks)){
     p <- p +scale_fill_gradientn(colours = color.pal, trans = plot.colorscale, na.value=plot.na, oob = squish, limits = c(min.abundance, max.abundance))
