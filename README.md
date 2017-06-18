@@ -9,4 +9,6 @@ install.packages("shiny")
 shiny::runGitHub("amplicon-visualiser","kasperskytte")
 ```
 
+If you get the error "there is no package 'packagename'" simply use install.packages("packagename") to install the required package(s). 
+
 Currently internal project on Aalborg University
