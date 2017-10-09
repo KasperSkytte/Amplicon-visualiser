@@ -1,889 +1,1038 @@
-amp_subset <- function(list, ...) {
-  #Check the data first
-  if(!is.list(list) | 
-     !any(names(list) == "abund") | 
-     !any(names(list) == "tax") | 
-     !any(names(list) == "metadata") | 
-     !is.data.frame(list[["abund"]]) |
-     !is.data.frame(list[["tax"]]) |
-     !is.data.frame(list[["metadata"]])
-  ) {
-    stop("The data must be a list with three dataframes named abund, tax and metadata")
-  }
-  
-  #extract data from the list
-  metadata <- list$metadata
-  abund <- list$abund
-  tax <- list$tax
-  
-  #subset metadata based on ... and only keep columns in otutable matching the rows in the subsetted metadata
-  newmetadata <- subset(metadata, ...)
-  newabund <- abund[, rownames(newmetadata), drop=FALSE]
-  
-  #return a new list
-  newlist <- list(abund = newabund, tax = tax, metadata = newmetadata)
-  return(newlist)
-}
-
-amp_subset_taxa <- function(list, ...) {
-  #Check the data first
-  if(!is.list(list) | 
-     !any(names(list) == "abund") | 
-     !any(names(list) == "tax") | 
-     !any(names(list) == "metadata") | 
-     !is.data.frame(list[["abund"]]) |
-     !is.data.frame(list[["tax"]]) |
-     !is.data.frame(list[["metadata"]])
-  ) {
-    stop("The data must be a list with three dataframes named abund, tax and metadata")
-  }
-  
-  #extract data from the list
-  metadata <- list$metadata
-  abund <- list$abund
-  tax <- list$tax
-  
-  #subset tax table based on ... and only keep rows in abund and metadata matching the rows in the subsetted tax table
-  newtax <- subset(tax, ...)
-  newabund <- abund[rownames(newtax), , drop=FALSE]
-  newmetadata <- metadata[colnames(newabund), , drop=FALSE]
-  
-  #return a new list
-  newlist <- list(abund = newabund, tax = newtax, metadata = newmetadata)
-  return(newlist)
-}
-
-amp_load <- function(otutable, metadata, refseq = NULL, rarefy = NULL, percent = FALSE){
-  #Must be data frames
+##### amp_load #####
+amp_load <- function (otutable, metadata, fasta = NULL) {
   otutable <- as.data.frame(otutable)
   metadata <- as.data.frame(metadata)
-  
-  # Remove whitespace from the otutable as this will break the structure of the taxonomy
-  trim <- function (x) gsub("^\\s+|\\s+$", "", x)
-  otutable$Kingdom<-trim(as.character(otutable$Kingdom))
-  otutable$Phylum<-trim(as.character(otutable$Phylum))
-  otutable$Class<-trim(as.character(otutable$Class))
-  otutable$Order<-trim(as.character(otutable$Order))
-  otutable$Family<-trim(as.character(otutable$Family))
-  otutable$Genus<-trim(as.character(otutable$Genus))
-  otutable$Species<-trim(as.character(otutable$Species))
-  
-  #metadata: order rows by rownames
-  metadata = suppressWarnings(as.data.frame(as.matrix(metadata)))
-  rownames(metadata) <- metadata[,1]
-  metadata <- metadata[order(rownames(metadata)), ]
-  
-  #Only alphanumeric characters in metadata column names, replace others with _
-  colnames(metadata) <- str_replace_all(colnames(metadata), "[^[:alnum:]]", "_")
-  
-  #abund: all columns from otutable except the last 7 to numeric and order rows by rownames:
-  abund <- as.data.frame(otutable[,1:(ncol(otutable) - 7)])/1
-  abund <- abund[order(rownames(abund)),order(colnames(abund))]
-  
-  #rarefy function
-  if(!is.null(rarefy)){
-    abund <- rarefy(abund, sample = rarefy)
+  rownames(metadata) <- as.character(metadata[, 1])
+  if (any(tolower(colnames(otutable)) == "otu")) {
+    otucolid <- which(tolower(colnames(otutable)) == "otu")
+    rownames(otutable) <- as.character(otutable[, otucolid])
+    otutable <- otutable[, -otucolid]
   }
-  
-  #abundances to percent, must be done AFTER rarefy
-  if(percent == TRUE) {
-    abund_pct <- as.data.frame(sapply(abund, function(x) x/sum(x)*100))
-    #keep the rownames!
-    rownames(abund_pct) <- rownames(abund)
-    abund <- abund_pct
+  else if (all(rownames(otutable) %in% c(1:nrow(otutable))) & 
+           !any(tolower(colnames(otutable)) == "otu")) {
+    stop("Cannot find OTU ID's. Make sure they are provided as rownames or in a column called \"OTU\".")
   }
-  
-  #tax: the last 7 columns from otutable to factor, order rows by rownames and order columns by taxonomic rank(not alphabetically)
-  tax <- data.frame(otutable[, (ncol(otutable) - 6):ncol(otutable)] 
-                    ,OTU = rownames(otutable))
-  tax <- tax[order(rownames(tax)), c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU")]
-  
-  #data: return the data in a combined list w or w/o refseq. Load
-  if(!is.null(refseq) & class(refseq) == "DNAStringSet") {
-    data <- list(abund = abund, tax = tax, metadata = metadata, refseq = refseq)
-  } else if(!is.null(refseq) & !class(refseq) == "DNAStringSet") {
-    stop("The reference sequences must be loaded with readDNAStringSet() from the biostrings package.")
-  } else if(is.null(refseq)) {
-    data <- list(abund = abund, tax = tax, metadata = metadata)
+  colnames(metadata) <- stringr::str_replace_all(colnames(metadata), 
+                                                 "[^[:alnum:]]", "_")
+  tax.names <- colnames(otutable[, (ncol(otutable) - 6):ncol(otutable)])
+  expected.tax <- c("Kingdom", "Phylum", "Class", "Order", 
+                    "Family", "Genus", "Species")
+  if (!all(tax.names %in% expected.tax)) {
+    stop(paste("The last 7 columns in the OTU-table must be the taxonomy (Kingdom->Species) and named accordingly\nCurrent:", 
+               paste(tax.names, collapse = ", "), "\nExpected:", 
+               paste(expected.tax, collapse = ", ")))
   }
-  
-  #check if metadata and otutable match
-  if(!all(rownames(data$metadata) %in% colnames(data$abund))) {
-    stop("The sample names in metadata do not match those in otutable")
+  trim <- function(x) gsub("^\\s+|\\s+$", "", x)
+  otutable$Kingdom <- trim(as.character(otutable$Kingdom))
+  otutable$Phylum <- trim(as.character(otutable$Phylum))
+  otutable$Class <- trim(as.character(otutable$Class))
+  otutable$Order <- trim(as.character(otutable$Order))
+  otutable$Family <- trim(as.character(otutable$Family))
+  otutable$Genus <- trim(as.character(otutable$Genus))
+  otutable$Species <- trim(as.character(otutable$Species))
+  abund <- lapply(otutable[, 1:(ncol(otutable) - 7), drop = FALSE], 
+                  as.numeric) %>% as.data.frame(check.names = FALSE, row.names = rownames(otutable))
+  abund0 <- abund
+  metadata0 <- metadata
+  if (!all(rownames(metadata) %in% colnames(abund)) | !all(colnames(abund) %in% 
+                                                           rownames(metadata))) {
+    if (!any(colnames(abund) %in% rownames(metadata))) {
+      stop("No sample names match between metadata and otutable. Check that you have loaded matching files and that they meet the requirements described in ?amp_load(). Remember to use check.names = FALSE when loading the files.")
+    }
+    else {
+      sharedSamples <- dplyr::intersect(colnames(abund), 
+                                        rownames(metadata))
+      abund0 <- abund[, match(sharedSamples, colnames(abund)), 
+                      drop = FALSE]
+      abund0 <- abund0[rowSums(abund0) > 0, ]
+      metadata0 <- metadata[match(sharedSamples, rownames(metadata)), 
+                            , drop = FALSE]
+      metadataUniques <- metadata[-which(rownames(metadata) %in% 
+                                           rownames(metadata0)), , drop = FALSE] %>% rownames()
+      abundUniques <- abund[, -which(colnames(abund) %in% 
+                                       colnames(abund0)), drop = FALSE] %>% colnames()
+      warning("Only ", ncol(abund0), " of ", length(unique(c(rownames(metadata), 
+                                                             colnames(abund)))), " unique sample names match between metadata and otutable. The following unmatched samples have been removed:", 
+              ifelse(length(metadataUniques) > 0, paste0("\nmetadata (", 
+                                                         length(metadataUniques), "): \n\t\"", paste(metadataUniques, 
+                                                                                                     collapse = "\", \""), "\""), ""), ifelse(length(abundUniques) > 
+                                                                                                                                                0, paste0("\notutable (", length(abundUniques), 
+                                                                                                                                                          "): \n\t\"", paste(abundUniques, collapse = "\", \""), 
+                                                                                                                                                          "\""), ""))
+    }
   }
+  tax <- data.frame(otutable[, (ncol(otutable) - 6):ncol(otutable)], 
+                    OTU = rownames(otutable))
+  tax <- tax[which(rownames(abund) %in% rownames(abund0)), 
+             c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", 
+               "Species", "OTU")]
+  tax[is.na(tax)] <- ""
+  if (!is.null(fasta)) {
+    data <- list(abund = abund0, tax = tax, metadata = metadata0, 
+                 refseq = ape::read.dna(file = fasta, format = "fasta"))
+  }
+  else {
+    data <- list(abund = abund0, tax = tax, metadata = metadata0)
+  }
+  class(data) <- "ampvis2"
   return(data)
 }
 
-amp_heatmap <- function(data, group = "Sample", normalise = NULL, scale = NULL, tax.aggregate = "Phylum", tax.add = NULL, tax.show = 10, tax.class = NULL, tax.empty = "best", order.x = NULL, order.y = NULL, plot.numbers = T, plot.breaks = NULL, plot.colorscale = "log10", plot.na = T, scale.seq = 100, output = "plot",plot.text.size = 4, plot.theme = "normal", calc = "mean", min.abundance = 0.1, max.abundance = NULL, sort.by = NULL, color.vector = NULL, round = 1){
-  
-  ## Clean up the taxonomy
-  data <- amp_rename(data = data, tax.class = tax.class, tax.empty = tax.empty, tax.level = tax.aggregate)
-  
-  ## Extract the data into separate objects for readability
-  abund <- data[["abund"]]
-  tax <- data[["tax"]]
-  sample <- data[["metadata"]]
-  
-  ## Scale the data by a selected metadata sample variable
-  if (!is.null(scale)){
-    variable <- as.numeric(sample[,scale])
-    abund <- t(t(abund)*variable)
-  }
-  
-  ## Make a name variable that can be used instead of tax.aggregate to display multiple levels 
-  suppressWarnings(
-    if (!is.null(tax.add)){
-      if (tax.add != tax.aggregate) {
-        tax <- data.frame(tax, Display = apply(tax[,c(tax.add,tax.aggregate)], 1, paste, collapse="; "))
-      }
-    } else {
-      tax <- data.frame(tax, Display = tax[,tax.aggregate])
-    }
-  )  
-  
-  # Aggregate to a specific taxonomic level
-  abund3 <- cbind.data.frame(Display = tax[,"Display"], abund) %>%
-    melt(id.var = "Display", value.name= "Abundance", variable.name = "Sample")
-  
-  abund3 <- data.table(abund3)[, sum:=sum(Abundance), by=list(Display, Sample)] %>%
-    setkey(Display, Sample) %>%
-    unique() %>% 
-    as.data.frame()
-  
-  ## Add group information
-  suppressWarnings(
-    if (group != "Sample"){
-      if (length(group) > 1){
-        grp <- data.frame(Sample = rownames(sample), Group = apply(sample[,group], 1, paste, collapse = " ")) 
-        oldGroup <- unique(cbind.data.frame(sample[,group], Group = grp$Group))
-      } else{
-        grp <- data.frame(Sample = rownames(sample), Group = sample[,group]) 
-      }
-      abund3$Group <- grp$Group[match(abund3$Sample, grp$Sample)]
-      abund5 <- abund3
-    } else{ abund5 <- data.frame(abund3, Group = abund3$Sample)}
-  )
-  
-  ## Take the average to group level
-  
-  if (calc == "mean"){
-    abund6 <- data.table(abund5)[, Abundance:=mean(sum), by=list(Display, Group)] %>%
-      setkey(Display, Group) %>%
-      unique() %>% 
-      as.data.frame()
-  }
-  
-  if (calc == "max"){
-    abund6 <- data.table(abund5)[, Abundance:=max(sum), by=list(Display, Group)] %>%
-      setkey(Display, Group) %>%
-      unique() %>% 
-      as.data.frame()
-  }  
-  
-  if (calc == "median"){
-    abund6 <- data.table(abund5)[, Abundance:=median(sum), by=list(Display, Group)] %>%
-      setkey(Display, Group) %>%
-      unique() %>% 
-      as.data.frame()
-  }
-  
-  
-  ## Find the X most abundant levels
-  if (calc == "mean"){
-    TotalCounts <- group_by(abund6, Display) %>%
-      summarise(Abundance = sum(Abundance)) %>%
-      arrange(desc(Abundance))
-  }
-  
-  if (calc == "max"){
-    TotalCounts <- group_by(abund6, Display) %>%
-      summarise(Abundance = max(Abundance)) %>%
-      arrange(desc(Abundance))
-  }
-  
-  if (calc == "median"){
-    TotalCounts <- group_by(abund6, Display) %>%
-      summarise(Abundance = median(Abundance)) %>%
-      arrange(desc(Abundance))
-  }
-  
-  if (!is.null(sort.by)){
-    TotalCounts <- filter(abund6, Group == sort.by) %>%
-      arrange(desc(Abundance))
-  }
-  
-  ## Subset to X most abundant levels
-  if (is.numeric(tax.show)){
-    if (tax.show > nrow(TotalCounts)){  
-      tax.show <- nrow(TotalCounts)
-    }
-    abund7 <- filter(abund6, Display %in% TotalCounts$Display[1:tax.show])
-  }
-  
-  ## Subset to a list of level names
-  if (!is.numeric(tax.show)){
-    if (tax.show != "all"){
-      abund7 <- filter(abund6, Display %in% tax.show)    
-    }
-    ### Or just show all  
-    if (tax.show == "all"){
-      tax.show <- nrow(TotalCounts)  
-      abund7 <- filter(abund6, Display %in% TotalCounts$Display[1:tax.show]) 
-    }
-  }
-  abund7 <- as.data.frame(abund7)
-  
-  ## Normalise to a specific group (The Abundance of the group is set as 1)  
-  
-  if(!is.null(normalise)){
-    if (normalise != "relative"){
-      temp <- dcast(abund7, Display~Group, value.var = "Abundance")
-      temp1 <- cbind.data.frame(Display = temp$Display, temp[,-1]/temp[,normalise])   
-      abund7 <- melt(temp1, id.var = "Display", value.name="Abundance", variable.name="Group")
-    }
-  } 
-  if(!is.null(normalise)){
-    if (normalise == "relative"){
-      temp <- dcast(abund7, Display~Group, value.var = "Abundance")
-      temp1 <- cbind.data.frame(Display = temp[,1], temp[,-1]/apply(as.matrix(temp[,-1]), 1, mean))    
-      abund7 <- melt(temp1, id.var = "Display" , value.name="Abundance", variable.name="Group")
-    }
-  }
-  
-  ## Order.y
-  if (is.null(order.y)){
-    abund7$Display <- factor(abund7$Display, levels = rev(TotalCounts$Display))
-  }
-  if (!is.null(order.y)){
-    if ((length(order.y) == 1) && (order.y != "cluster")){       
-      temp1 <- filter(abund7, Group == order.y) %>%
-        group_by(Display) %>%
-        summarise(Mean = mean(Abundance)) %>%
-        arrange(desc(Mean))
-      
-      abund7$Display <- factor(abund7$Display, levels = rev(temp1$Display))
-    }
-    if (length(order.y) > 1){
-      abund7$Display <- factor(abund7$Display, levels = order.y)
-    }
-    if ((length(order.y) == 1) && (order.y == "cluster")){
-      if (is.null(max.abundance)){max.abundance <- max(abund7$Abundance)}
-      tdata <- mutate(abund7, 
-                      Abundance = ifelse(Abundance < min.abundance, min.abundance, Abundance),
-                      Abundance = ifelse(Abundance > max.abundance, max.abundance, Abundance))
-      tdata <- dcast(tdata, Display~Group, value.var = "Abundance")
-      rownames(tdata) <- tdata$Display
-      tdata2 <- tdata[,-1]
-      tclust <- hclust(dist(tdata2))
-      tnames <- levels(droplevels(tdata$Display))[tclust$order]
-      abund7$Display <- factor(abund7$Display, levels = tnames)
-    }
-  }
-  
-  ## Order.x
-  if (!is.null(order.x)){
-    if ((length(order.x) == 1) && (order.x != "cluster")){
-      temp1 <- filter(abund7, Display == order.x) %>%
-        group_by(Group) %>%
-        summarise(Mean = mean(Abundance)) %>%
-        arrange(desc(Mean))
-      abund7$Group <- factor(abund7$Group, levels = as.character(temp1$Group))
-    }    
-    if (length(order.x) > 1){
-      abund7$Group <- factor(abund7$Group, levels = order.x)
-    }
-    if ((length(order.x) == 1) && (order.x == "cluster")){
-      if (is.null(max.abundance)){max.abundance <- max(abund7$Abundance)}
-      tdata <- mutate(abund7, 
-                      Abundance = ifelse(Abundance < min.abundance, min.abundance, Abundance),
-                      Abundance = ifelse(Abundance > max.abundance, max.abundance, Abundance))
-      tdata <- dcast(tdata, Display~Group, value.var = "Abundance")
-      rownames(tdata) <- tdata$Display
-      tdata2 <- tdata[,-1]
-      tclust <- hclust(dist(t(tdata2)))
-      tnames <- tclust$labels[tclust$order]
-      abund7$Group <- factor(abund7$Group, levels = tnames) 
-    }
-  }
-  
-  ## Handle NA values
-  if(plot.na == F){ plot.na <- "grey50" }else{ if(!is.null(color.vector)) {plot.na <-color.vector[1]} else {plot.na <-"#67A9CF"}}  
-  
-  ## Scale to percentages if not normalised and scaled
-  
-  if (is.null(scale) & is.null(normalise)){
-    abund7[,3] <- abund7[,3]/scale.seq*100
-  }
-  
-  if (length(group) > 1 ){ abund7 <- merge(abund7, oldGroup)}
-  
-  if (is.null(min.abundance)){
-    min.abundance <- ifelse(min(abund7$Abundance) > 0.001, min(abund7$Abundance), 0.001)
-  }
-  if (is.null(max.abundance)){
-    max.abundance <- max(abund7$Abundance)
-  }
-  
-  ## Make a heatmap style plot
-  p <- ggplot(abund7, aes_string(x = "Group", y = "Display", label = formatC("Abundance", format = "f", digits = 1))) +     
-    geom_tile(aes(fill = Abundance), colour = "white", size = 0.5) +
-    theme(axis.text.x = element_text(size = 10, hjust = 1, angle = 90)) + 
-    theme(axis.text.y = element_text(size = 12)) + 
-    theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"))
-  
-  ## Get colorpalette for colorscale or set default
-  if (!is.null(color.vector)){
-    color.pal = color.vector
-  } else {
-    color.pal = rev(brewer.pal(3, "RdBu"))
-  }
-  
-  if (plot.numbers == T){
-    abund8 <- abund7
-    abund8$Abundance <- round(abund8$Abundance, round)
-    p <- p + geom_text(data = abund8, size = plot.text.size, colour = "grey10", check_overlap = TRUE)
-  }
-  if (is.null(plot.breaks)){
-    p <- p +scale_fill_gradientn(colours = color.pal, trans = plot.colorscale, na.value=plot.na, oob = squish, limits = c(min.abundance, max.abundance))
-  }
-  if (!is.null(plot.breaks)){
-    p <- p +scale_fill_gradientn(colours = color.pal, trans = plot.colorscale, breaks=plot.breaks, na.value=plot.na , oob = squish, limits = c(min.abundance, max.abundance))
-  }
-  
-  
-  if (is.null(normalise)){
-    p <- p + labs(x = "", y = "", fill = "% Read\nAbundance")  
-  }
-  if (!is.null(normalise)){
-    p <- p + labs(x = "", y = "", fill = "Relative")  
-  }
-  
-  if(plot.theme == "clean"){
-    p <- p + theme(legend.position = "none",
-                   axis.text.y = element_text(size = 8, color = "black"),
-                   axis.text.x = element_text(size = 8, color = "black", vjust = 0.5),
-                   axis.title = element_blank(),
-                   text = element_text(size = 8, color = "black"),
-                   axis.ticks.length = unit(1, "mm"),
-                   plot.margin = unit(c(0,0,0,0), "mm"),
-                   title = element_text(size = 8)
-    )
-  }
-  
-  ## Define the output 
-  if (output == "complete"){
-    outlist <- list(heatmap = p, data = abund7)
-    return(outlist)  
-  }
-  if (output == "plot"){
-    return(p)
-  }
-}
-
-amp_rabund <- function(data, group = "Sample", order.group = NULL, tax.show = 50, scale.seq = 100, tax.clean = T, plot.type = "boxplot", plot.log = F, output = "plot", tax.add = NULL, tax.aggregate = "Genus", tax.empty = "best", tax.class = NULL, point.size = 2, plot.flip = F, sort.by = "median", adjust.zero = NULL, plot.theme = "normal", order.y = NULL){
-  
-  ## Clean up the taxonomy
-  data <- amp_rename(data = data, tax.class = tax.class, tax.empty = tax.empty, tax.level = tax.aggregate)
-  
-  ## Extract the data into separate objects for readability
-  abund <- data[["abund"]]
-  tax <- data[["tax"]]
-  sample <- data[["metadata"]]
-  
-  ## Make a name variable that can be used instead of tax.aggregate to display multiple levels 
-  suppressWarnings(
-    if (!is.null(tax.add)){
-      if (tax.add != tax.aggregate) {
-        tax <- data.frame(tax, Display = apply(tax[,c(tax.add,tax.aggregate)], 1, paste, collapse="; "))
-      }
-    } else {
-      tax <- data.frame(tax, Display = tax[,tax.aggregate])
-    }
-  )  
-  
-  # Aggregate to a specific taxonomic level
-  abund3 <- cbind.data.frame(Display = tax[,"Display"], abund) %>%
-    melt(id.var = "Display", value.name= "Abundance", variable.name = "Sample")
-  
-  abund3 <- data.table(abund3)[, Abundance:=sum(Abundance), by=list(Display, Sample)] %>%
-    setkey(Display, Sample) %>%
-    unique() %>% 
-    as.data.frame()
-  
-  ## Add group information
-  suppressWarnings(
-    if (group != "Sample"){
-      if (length(group) > 1){
-        grp <- data.frame(Sample = rownames(sample), Group = apply(sample[,group], 1, paste, collapse = " ")) 
-      } else{
-        grp <- data.frame(Sample = rownames(sample), Group = sample[,group]) 
-      }
-      abund3$Group <- grp$Group[match(abund3$Sample, grp$Sample)]
-      abund5 <- abund3
-    } else{ abund5 <- data.frame(abund3, Group = abund3$Sample)}
-  ) 
-  
-  if (plot.type != "curve"){
-    ## Find the x most abundant levels and sort
-    TotalCounts <- group_by(abund5, Display) %>%
-      summarise(Median = median(Abundance), Total = sum(Abundance), Mean = mean(Abundance))
-    if(sort.by == "median"){TotalCounts %<>% arrange(desc(Median)) %>% as.data.frame()}
-    if(sort.by == "mean"){TotalCounts %<>% arrange(desc(Mean)) %>% as.data.frame()}
-    if(sort.by == "total"){TotalCounts %<>% arrange(desc(Total)) %>% as.data.frame()}
-    
-    abund5$Display <- factor(abund5$Display, levels = rev(TotalCounts$Display))
-    
-    ## Subset to the x most abundant levels
-    if (is.numeric(tax.show)){
-      message(tax.show)
-      if (tax.show > nrow(TotalCounts)){  
-        tax.show <- nrow(TotalCounts)
-      }
-      abund7 <- subset(abund5, abund5$Display %in% TotalCounts[1:tax.show,"Display"])  
-    }
-    ## Subset to a list of level names
-    if (!is.numeric(tax.show)){
-      if (length(tax.show) > 1){
-        abund7 <- subset(abund5, as.character(abund5$Display) %in% tax.show)
-      }
-      if ((length(tax.show) == 1) && (tax.show != "all")){
-        abund7 <- subset(abund5, as.character(abund5$Display) %in% tax.show)
-      }
-      ### Or just show all  
-      if ((length(tax.show) == 1) && (tax.show == "all")){
-        tax.show <- nrow(TotalCounts)  
-        abund7 <- subset(abund5, abund5$Display %in% TotalCounts[1:tax.show,"Display"])  
-      }
-    }
-    
-    ## Scale to a specific abundance
-    abund7$Abundance <- abund7$Abundance/scale.seq*100
-    
-    ## Add a small constant to handle ggplot2 removal of 0 values in log scaled plots
-    if(!is.null(adjust.zero)){
-      abund7$Abundance[abund7$Abundance==0] <- adjust.zero
-    }
-    
-    ## Order y based on a vector
-    if (length(order.y) > 1){
-      abund7$Display <- factor(abund7$Display, levels = order.y)
-      abund7 <- subset(abund7, !is.na(Display))
-    }
-    
-    ## plot the data
-    if (group == "Sample"){
-      p <-ggplot(abund7, aes(x = Display, y = Abundance))   
-    }
-    if (group != "Sample"){
-      if(!is.null(order.group)){
-        abund7$Group <- factor(abund7$Group, levels = rev(order.group))
-      }
-      p <-ggplot(abund7, aes(x = Display, y = Abundance, color = Group))   
-    }
-    
-    p <- p +  ylab("Read Abundance (%)") + guides(col = guide_legend(reverse = TRUE)) + xlab("")
-    
-    if (plot.flip == F){ p <- p + coord_flip() } else{
-      p <- p + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-    }
-    
-    if (plot.type == "point"){ p <- p + geom_point(size = point.size) }
-    if (plot.type == "boxplot"){p <- p + geom_boxplot(outlier.size = point.size)}
-    if (plot.log ==T){ p <- p + scale_y_log10()}
-    
-    outlist <- list(plot = p, data = abund7)
-  }
-  
-  ## If type = curve then generate a second dataframe
-  
-  if (plot.type == "curve"){
-    temp3 <- group_by(abund5, Display, Group) %>%
-      summarise(Mean = mean(Abundance))
-    
-    TotalCounts <- temp3[with(temp3, order(-Mean)),] %>%
-      group_by(Group) %>%
-      mutate(dummy = 1) %>%
-      mutate(Cumsum = cumsum(Mean), Rank = cumsum(dummy)) %>%
-      as.data.frame()
-    
-    if(!is.null(order.group)){
-      TotalCounts$Group <- factor(TotalCounts$Group, levels = rev(order.group))
-    }
-    TotalCounts$Cumsum <- TotalCounts$Cumsum/scale.seq * 100
-    
-    p <- ggplot(data = TotalCounts, aes(x = Rank, y = Cumsum, color = Group)) +
-      geom_line(size = 2) +
-      ylim(0,100) +
-      xlab("Rank abundance") +
-      ylab("Cummulative read abundance (%)")  
-    if (plot.log ==T){
-      p <- p + scale_x_log10() 
-    } 
-    
-    outlist <- list(plot = p, data = TotalCounts)
-  }
-  
-  if(plot.theme == "clean"){
-    p <- p + theme(axis.ticks.length = unit(1, "mm"),
-                   axis.ticks = element_line(color = "black"),
-                   text = element_text(size = 10, color = "black"),
-                   axis.text = element_text(size = 8, color = "black"),
-                   plot.margin = unit(c(0,0,0,0), "mm"),
-                   panel.grid.major = element_line(color = "grey90"),
-                   panel.grid.minor = element_blank(),
-                   legend.key = element_blank(),
-                   panel.background = element_blank(),
-                   axis.line = element_line(color = "black")
-    )
-  }
-  
-  if(output == "complete"){ return(outlist) }
-  if(output == "plot"){ return(p) }
-}
-
-amp_ordinate <- function(data, scale = NULL, trans = "sqrt", ordinate.type = "PCA", ncomp = 5, plot.x = "PC1", plot.y = "PC2", plot.color = NULL, plot.color.order = NULL, plot.point.size = 3, plot.shape = NULL, plot.species = F, plot.nspecies = NULL, plot.nspecies.tax = "Genus", plot.label = NULL, plot.group = NULL, plot.group.label = NULL, envfit.factor = NULL, envfit.numeric = NULL, envfit.significant = 0.001, envfit.resize = 1, envfit.color = "darkred", envfit.textsize = 3, envfit.show = T, tax.empty ="best", output = "plot", constrain = NULL, scale.species = F, trajectory = NULL, trajectory.group = trajectory, plot.group.label.size = 4, plot.theme = "normal", plot.group.manual = NULL, plot.label.size = 3, plot.label.repel = F, plot.label.seqment.color = "black", plot.nspecies.repel = F, plot.species.size = 2, plot.nspecies.size = 4){
-  
-  ## Clean up the taxonomy
-  data <- amp_rename(data = data, tax.empty = tax.empty)
-  
-  ## Extract the data into separate objects for readability
-  abund <- data[["abund"]]
-  tax <- data[["tax"]]
-  sample <- data[["metadata"]]
-  
-  outlist <- list(abundance = abund, taxonomy = tax, sampledata = sample)
-  
-  if (length(trajectory.group) > 1){
-    sample$TrajGroup <- do.call(paste, c(as.list(sample[,trajectory.group]), sep=" "))
-    trajectory.group <- "TrajGroup"
-  }
-  
-  if (length(plot.color) > 1){
-    sample$ColorGroup <- do.call(paste, c(as.list(sample[,plot.color]), sep=" "))
-    plot.color <- "ColorGroup"
-  }
-  
-  ## Scale the data
-  if (!is.null(scale)){
-    variable <- unlist(sample[,scale])
-    abund <- t(t(abund)*variable)
-  }
-  
-  ## Transform the data
-  abund1 <- abund
-  if (trans == "sqrt"){ abund1 <- sqrt(abund)}
-  
-  ## Calculate NMDS
-  
-  if (ordinate.type == "NMDS"){
-    plot.x = "MDS1"
-    plot.y = "MDS2"
-    
-    model <- metaMDS(t(abund1))
-    combined <- cbind.data.frame(model$points, sample) 
-    
-    loadings <- cbind.data.frame(model$species, tax)
-    loadings$MDS1 <- loadings$MDS1*attributes(model$species)$shrinkage[1]
-    loadings$MDS2 <- loadings$MDS2*attributes(model$species)$shrinkage[2]
-    OTU <- gsub("denovo", "", rownames(loadings))
-    loadings <- cbind.data.frame(loadings, OTU)
-    
-    if(scale.species == T){
-      maxx <- max(abs(scores[,plot.x]))/max(abs(loadings[,plot.x]))
-      loadings[, plot.x] <- loadings[, plot.x] * maxx * 0.8
-      
-      maxy <- max(abs(scores[,plot.y]))/max(abs(loadings[,plot.y]))
-      loadings[, plot.y] <- loadings[, plot.y] * maxy * 0.8 
-    }
-    
-    species <- cbind(loadings, loadings[,plot.x]^2 + loadings[,plot.y]^2)
-    colnames(species)[ncol(species)] <- "dist"
-    species <- species[with(species, order(-dist)), ]
-    
-    outlist <- append(outlist, list(nmds.model = model, nmds.scores = combined, nmds.loadings = species))
-  }
-  
-  ## Calculate PCA
-  
-  if (ordinate.type == "PCA"){
-    
-    if(is.null(constrain)){
-      model <- rda(t(abund1))  
-      exp <- round(model$CA$eig/model$CA$tot.chi*100,1)
-    }
-    
-    if(!is.null(constrain)){
-      constrain1 <- as.data.frame(sample[, constrain])
-      colnames(constrain1) <- "constrain"
-      model <- rda(t(abund1) ~ constrain1$constrain)  
-      plot.x <- "RDA1"
-      if (model$CCA$rank > 1){
-        plot.y <- "RDA2"
-      }
-      exp <- round(model$CA$eig/model$tot.chi*100,1)
-      expCCA <- round(model$CCA$eig/model$CA$tot.chi*100,1)
-      exp <- c(exp, expCCA)
-    }
-    
-    scores <- scores(model, choices = 1:ncomp)$sites
-    combined <- cbind.data.frame(sample, scores)
-    
-    loadings <- cbind.data.frame(scores(model, choices = 1:ncomp)$species, tax)
-    OTU <- gsub("denovo", "", rownames(loadings))
-    loadings <- cbind.data.frame(loadings, OTU)
-    
-    if(scale.species == T){
-      maxx <- max(abs(scores[,plot.x]))/max(abs(loadings[,plot.x]))
-      loadings[, plot.x] <- loadings[, plot.x] * maxx * 0.8
-      
-      maxy <- max(abs(scores[,plot.y]))/max(abs(loadings[,plot.y]))
-      loadings[, plot.y] <- loadings[, plot.y] * maxy * 0.8
-      
-    }
-    
-    species <- cbind(loadings, loadings[,plot.x]^2 + loadings[,plot.y]^2)
-    colnames(species)[ncol(species)] <- "dist"
-    species <- species[with(species, order(-dist)), ]
-    
-    outlist <- append(outlist, list(pca.model = model, pca.scores = combined, loadings = species))
-  }
-  
-  ## Fit environmental factors using vegans "envfit" function
-  
-  if(!is.null(envfit.factor)){   
-    fit  <- suppressWarnings(as.data.frame(as.matrix(sample[, envfit.factor])))
-    if (ordinate.type == "PCA"){ef.f <- envfit(model, fit, permutations = 999, choices=c(plot.x, plot.y))}
-    if (ordinate.type == "NMDS"){ef.f <- envfit(model, fit, permutations = 999)}
-    temp <- cbind.data.frame(rownames(ef.f$factors$centroids),ef.f$factors$var.id, ef.f$factors$centroids)
-    colnames(temp)[1:2] <- c("Name","Variable")
-    temp1 <- cbind.data.frame(names(ef.f$factors$pvals), ef.f$factors$pvals)
-    colnames(temp1) <- c("Variable", "pval")
-    temp2 <- merge(temp, temp1)
-    f.sig <- subset(temp2, pval <= envfit.significant)   
-    if (ordinate.type == "NMDS"){colnames(f.sig)[3:4] <- c("MDS1", "MDS2")}
-    outlist <- append(outlist, list(eff.model = ef.f))
-  }
-  
-  ## Fit environmental numeric data using vegans "envfit" function
-  
-  if (!is.null(envfit.numeric)){
-    fit <- suppressWarnings(as.data.frame(as.matrix(sample[, envfit.numeric])))
-    if (ordinate.type == "PCA") {suppressWarnings(ef.n <- envfit(model, fit, permutations = 999, choices=c(plot.x, plot.y)))}
-    if (ordinate.type == "NMDS") {ef.n <- envfit(model, fit, permutations = 999)}
-    temp <- cbind.data.frame(rownames(ef.n$vectors$arrows), ef.n$vectors$arrows*sqrt(ef.n$vectors$r), ef.n$vectors$pvals)
-    colnames(temp)[c(1,4)] <- c("Name","pval")      
-    n.sig <- subset(temp, pval <= envfit.significant)          
-    if (ordinate.type == "NMDS"){colnames(n.sig)[2:3] <- c("MDS1", "MDS2")}
-    outlist <- append(outlist, list(efn.model = ef.n))
-  }
-  
-  ## Order the colors
-  
-  if (!is.null(plot.color.order)) {
-    combined[,plot.color] <- factor(combined[,plot.color], levels = plot.color.order)
-  }
-  
-  ## Plot  
-  
-  ### Plot: Basic plot either with or without colors
-  p <- ggplot(combined, aes_string(x = plot.x, y = plot.y, color = plot.color, shape = plot.shape))
-  
-  ### Plot: Add loadings as points
-  if(plot.species == T){
-    p <- p + geom_point(data = species, color = "grey", shape = 20, size = plot.species.size)        
-  }
-  
-  ###Plot: Add trajectory based on e.g. data
-  if (!is.null(trajectory)){
-    traj <- combined[order(combined[,trajectory]),]
-    p <- p + geom_path(data = traj, aes_string(group = trajectory.group))
-  }
-  
-  ### Plot: Add samples as points
-  p <- p + geom_point(size = plot.point.size)
-  
-  ### Plot: If PCA add explained variance to the axis
-  if(ordinate.type == "PCA"){
-    p <- p + xlab(paste(plot.x, " [",exp[plot.x],"%]", sep = "")) +
-      ylab(paste(plot.y, " [",exp[plot.y],"%]", sep = ""))  
-  }  
-  
-  ###Plot: Group the data either by centroid or chull
-  if (is.null(plot.group.manual)){
-    plot.group.manual <- plot.color
-  }
-  
-  if (!is.null(plot.group)& !is.null(plot.color)){    
-    os <- data.frame(group = combined[,plot.group.manual], x = combined[,plot.x], y = combined[,plot.y]) %>%
-      group_by(group) %>%
-      summarise(cx = mean(x), cy = mean(y)) %>%
-      as.data.frame()
-    os2 <- merge(combined, os, by.x=plot.group.manual, by.y = "group")
-    
-    
-    if (plot.group == "centroid"){
-      p <- p + geom_segment(data=os2, aes_string(x = plot.x, xend = "cx", y = plot.y, yend = "cy", color = plot.color), size = 1)
-    }
-    
-    if (plot.group == "chull"){
-      splitData <- split(combined, combined[,plot.group.manual]) %>%
-        lapply(function(df){df[chull(df[,plot.x], df[,plot.y]), ]})
-      hulls <- do.call(rbind, splitData)
-      
-      p <- p + geom_polygon(data=hulls, aes_string(fill = plot.color, group = plot.group.manual), alpha = 0.2)
-    }
-  }
-  
-  if (!is.null(plot.group.label)){
-    os <- data.frame(group = combined[,plot.group.label], x = combined[,plot.x], y = combined[,plot.y]) %>%
-      group_by(group) %>%
-      summarise(cx = mean(x), cy = mean(y)) %>%
-      as.data.frame()
-    
-    os2 <- merge(combined, os, by.x=plot.group.label, by.y = "group")
-    os3<- os2[!duplicated(os2[,plot.group.label]),]
-    p <- p + geom_text(data=os3, aes_string(x = "cx", y = "cy", label = plot.group.label), size = plot.group.label.size , color = "black", fontface = 2) 
-  }
-  
-  ### Plot: Plot the names of the n most extreme species
-  if(!is.null(plot.nspecies)){
-    if(plot.nspecies.repel == F){
-      p <- p + geom_text(data = species[1:plot.nspecies,], aes_string(x = plot.x, y = plot.y, label = plot.nspecies.tax), colour = "black", size = plot.nspecies.size, inherit.aes = F)  
-    } else {
-      p <- p + geom_text_repel(data = species[1:plot.nspecies,], aes_string(x = plot.x, y = plot.y, label = plot.nspecies.tax), colour = "black", size = plot.nspecies.size, inherit.aes = F)  
-    }
-  }
-  
-  ### Plot: Environmental factors
-  if(!is.null(envfit.factor) & envfit.show == T){
-    if (nrow(f.sig) != 0){
-      p <- p + geom_text(data = f.sig, aes_string(x = plot.x, y = plot.y, label = "Name"), colour = envfit.color, size = 4, hjust = -0.05, vjust = 1, inherit.aes = F, size = envfit.textsize)
-    }
-  }
-  
-  ### Plot: Environmental numeric data
-  if(!is.null(envfit.numeric) & envfit.show == T){
-    if (nrow(n.sig) != 0){
-      n.sig[, plot.x] <- n.sig[, plot.x]*envfit.resize
-      n.sig[, plot.y] <- n.sig[, plot.y]*envfit.resize
-      n.sig2 <- n.sig
-      n.sig2[, plot.x] <- n.sig[, plot.x]*1.2
-      n.sig2[, plot.y] <- n.sig[, plot.y]*1.2
-      
-      p <- p + geom_segment(data=n.sig, aes_string(x = 0, xend = plot.x, y = 0, yend = plot.y),arrow = arrow(length = unit(3, "mm")), colour = "darkred", size = 1 , inherit.aes = F) +
-        geom_text(data=n.sig2, aes_string(x = plot.x, y = plot.y, label = "Name"), colour = envfit.color, inherit.aes = F, size = envfit.textsize)
-    }
-  }  
-  
-  ### Plot: Label all samples using sample data
-  
-  if (!is.null(plot.label)){
-    if(plot.label.repel == F){
-      p <- p + geom_text(aes_string(label=plot.label), size = plot.label.size, color = "grey40", vjust = 1.5)
-    } else{
-      p <- p + geom_text_repel(aes_string(label=plot.label), size = plot.label.size, color = "grey40", segment.color = plot.label.seqment.color)
-    }
-  }  
-  
-  if(plot.theme == "clean"){
-    p <- p + theme(axis.ticks.length = unit(1, "mm"),
-                   axis.ticks = element_line(color = "black"),
-                   text = element_text(size = 10, color = "black"),
-                   axis.text = element_text(size = 8, color = "black"),
-                   plot.margin = unit(c(0,0,0,0), "mm"),
-                   panel.grid = element_blank(),
-                   legend.key = element_blank(),
-                   panel.background = element_blank(),
-                   axis.line.x = element_line(color = "black"),
-                   axis.line.y = element_line(color = "black"))
-  }
-  
-  outlist <- append(outlist, list(plot = p))
-  
-  ## Export the data
-  
-  if(output == "plot"){
-    return(outlist$plot)
-  }
-  if(output == "complete"){
-    return(outlist)
-  }
-  
-}
-
-amp_rename <- function(data, tax.class = NULL, tax.empty = "best", tax.level = "Genus"){
-  
+##### amp_rename #####
+amp_rename <- function (data, tax_class = NULL, tax_empty = "best", tax_level = "Genus") {
   tax = data[["tax"]]
-  
-  ## First make sure that all entries are strings
-  for ( i in 1:ncol(tax) ){
-    tax[,i] <- as.character(tax[,i])  
+  for (i in 1:ncol(tax)) {
+    tax[, i] <- as.character(tax[, i])
   }
-  
-  ## Change a specific phylum to class level
-  if(!is.null(tax.class)){
-    for (i in 1:nrow(tax)){
-      if (!is.na(tax$Phylum[i]) & tax$Phylum[i] %in% tax.class){
-        tax$Phylum[i] <- tax$Class[i]   
+  if (!is.null(tax_class)) {
+    for (i in 1:nrow(tax)) {
+      if (!is.na(tax$Phylum[i]) & tax$Phylum[i] %in% tax_class) {
+        tax$Phylum[i] <- tax$Class[i]
       }
     }
   }
-  
-  ## Remove the underscore classifier from the data  
-  tax$Kingdom <- gsub("k__", "", tax$Kingdom)
-  tax$Phylum <- gsub("p__", "", tax$Phylum)
-  tax$Phylum <- gsub("c__", "", tax$Phylum)
-  tax$Class <- gsub("c__", "", tax$Class)
-  tax$Order <- gsub("o__", "", tax$Order)
-  tax$Family <- gsub("f__", "", tax$Family)
-  tax$Genus <- gsub("g__", "", tax$Genus)
+  tax$Kingdom <- gsub("^k_*", "", tax$Kingdom)
+  tax$Phylum <- gsub("^p_*", "", tax$Phylum)
+  tax$Phylum <- gsub("^c_*", "", tax$Phylum)
+  tax$Class <- gsub("^c_*", "", tax$Class)
+  tax$Order <- gsub("^o_*", "", tax$Order)
+  tax$Family <- gsub("^f_*", "", tax$Family)
+  tax$Genus <- gsub("^g_*", "", tax$Genus)
   tax$Kingdom <- gsub("uncultured", "", tax$Kingdom)
-  tax$Phylum <- gsub("uncultured", "", tax$Phylum)
   tax$Phylum <- gsub("uncultured", "", tax$Phylum)
   tax$Class <- gsub("uncultured", "", tax$Class)
   tax$Order <- gsub("uncultured", "", tax$Order)
   tax$Family <- gsub("uncultured", "", tax$Family)
   tax$Genus <- gsub("uncultured", "", tax$Genus)
-  
-  ## Check if there is a species level otherwise add it for consistency
-  if (!is.null(tax$Species)){
-    tax$Species <- gsub("s__", "", tax$Species)
-  } else {
+  if (!is.null(tax$Species)) {
+    tax$Species <- gsub("^s_*", "", tax$Species)
+  }
+  else {
     tax$Species <- ""
   }
-  
   tax[is.na(tax)] <- ""
-  
-  ## How to handle empty taxonomic assignments
-  if (tax.empty == "OTU"){
+  if (tax_empty == "OTU") {
     for (i in 1:nrow(tax)) {
-      if (tax[i,"Species"] == "") {tax[i,"Species"] <- rownames(tax)[i]}
-      if (tax[i,"Genus"] == "") {tax[i,"Genus"] <- rownames(tax)[i]}
-      if (tax[i,"Family"] == "") {tax[i,"Family"] <- rownames(tax)[i]}
-      if (tax[i,"Order"] == "") {tax[i,"Order"] <- rownames(tax)[i]}
-      if (tax[i,"Class"] == "") {tax[i,"Class"] <- rownames(tax)[i]}
-      if (tax[i,"Phylum"] == "") {tax[i,"Phylum"] <- rownames(tax)[i]}
+      if (tax[i, "Species"] == "") {
+        tax[i, "Species"] <- rownames(tax)[i]
+      }
+      if (tax[i, "Genus"] == "") {
+        tax[i, "Genus"] <- rownames(tax)[i]
+      }
+      if (tax[i, "Family"] == "") {
+        tax[i, "Family"] <- rownames(tax)[i]
+      }
+      if (tax[i, "Order"] == "") {
+        tax[i, "Order"] <- rownames(tax)[i]
+      }
+      if (tax[i, "Class"] == "") {
+        tax[i, "Class"] <- rownames(tax)[i]
+      }
+      if (tax[i, "Phylum"] == "") {
+        tax[i, "Phylum"] <- rownames(tax)[i]
+      }
     }
   }
-  
-  ## Handle empty taxonomic strings
-  if(tax.empty == "best"){
-    tax <- mutate(tax, Kingdom, Kingdom = ifelse(Kingdom == "", "Unclassified", Kingdom)) %>%
-      mutate(Phylum, Phylum = ifelse(Phylum == "", paste("k__", Kingdom, "_", rownames(tax), sep = ""), Phylum)) %>%
-      mutate(Class, Class = ifelse(Class == "", ifelse(grepl("__", Phylum), Phylum, paste("c__", Phylum, "_", rownames(tax), sep = "")), Class)) %>%
-      mutate(Order, Order = ifelse(Order == "", ifelse(grepl("__", Class), Class, paste("c__", Class, "_", rownames(tax), sep = "")), Order)) %>%
-      mutate(Family, Family = ifelse(Family == "", ifelse(grepl("__", Order), Order, paste("o__", Order, "_", rownames(tax), sep = "")), Family)) %>%
-      mutate(Genus, Genus = ifelse(Genus == "", ifelse(grepl("__", Family), Family, paste("f__", Family, "_", rownames(tax), sep = "")), Genus)) %>%
-      mutate(Species, Species = ifelse(Species == "", ifelse(grepl("__", Genus), Genus, paste("g__", Genus, "_", rownames(tax), sep = "")), Species))
+  rn <- rownames(tax)
+  if (tax_empty == "best") {
+    tax <- mutate(tax, Kingdom, Kingdom = ifelse(Kingdom == 
+                                                   "", "Unclassified", Kingdom)) %>% mutate(Phylum, 
+                                                                                            Phylum = ifelse(Phylum == "", paste("k__", Kingdom, 
+                                                                                                                                "_", rownames(tax), sep = ""), Phylum)) %>% 
+      mutate(Class, Class = ifelse(Class == "", ifelse(grepl("__", 
+                                                             Phylum), Phylum, paste("c__", Phylum, "_", rownames(tax), 
+                                                                                    sep = "")), Class)) %>% mutate(Order, Order = ifelse(Order == 
+                                                                                                                                           "", ifelse(grepl("__", Class), Class, paste("c__", 
+                                                                                                                                                                                       Class, "_", rownames(tax), sep = "")), Order)) %>% 
+      mutate(Family, Family = ifelse(Family == "", ifelse(grepl("__", 
+                                                                Order), Order, paste("o__", Order, "_", rownames(tax), 
+                                                                                     sep = "")), Family)) %>% mutate(Genus, Genus = ifelse(Genus == 
+                                                                                                                                             "", ifelse(grepl("__", Family), Family, paste("f__", 
+                                                                                                                                                                                           Family, "_", rownames(tax), sep = "")), Genus)) %>% 
+      mutate(Species, Species = ifelse(Species == "", 
+                                       ifelse(grepl("__", Genus), Genus, paste("g__", 
+                                                                               Genus, "_", rownames(tax), sep = "")), Species))
   }
-  
-  if(tax.empty == "remove"){
+  rownames(tax) <- rn
+  if (tax_empty == "remove") {
     abund <- data[["abund"]]
-    tax <- subset(tax, tax[,tax.level] != "")
+    tax <- subset(tax, tax[, tax_level] != "")
     abund <- subset(abund, rownames(abund) %in% rownames(tax))
     data[["abund"]] <- abund
   }
   data[["tax"]] <- tax
-  
+  rownames(data[["tax"]]) <- rownames(tax)
   return(data)
+}
+
+
+##### amp_heatmap #####
+amp_heatmap <- function (data, group_by = NULL, facet_by = NULL, normalise_by = NULL, 
+                         scale_by = NULL, tax_aggregate = "Phylum", tax_add = NULL, 
+                         tax_show = 10, tax_class = NULL, tax_empty = "best", order_x_by = NULL, 
+                         order_y_by = NULL, plot_values = TRUE, plot_legendbreaks = NULL, 
+                         plot_colorscale = "log10", plot_na = TRUE, plot_values_size = 4, 
+                         plot_theme = "normal", measure = "mean", min_abundance = 0.1, 
+                         max_abundance = NULL, sort_by = NULL, color_vector = NULL, 
+                         round = 1, raw = FALSE, textmap = FALSE) {
+  
+  data <- amp_rename(data = data, tax_class = tax_class, tax_empty = tax_empty, 
+                     tax_level = tax_aggregate)
+  if (!is.null(tax_aggregate) & !is.null(tax_add)) {
+    if (tax_aggregate == tax_add) {
+      stop("tax_aggregate and tax_add cannot be the same")
+    }
+  }
+  abund <- data[["abund"]]
+  tax <- data[["tax"]]
+  metadata <- data[["metadata"]]
+  if (!is.null(group_by)) {
+    metadata[group_by] <- lapply(metadata[group_by], factor)
+  }
+  if (!is.null(facet_by)) {
+    if (is.null(group_by)) {
+      group_by <- facet_by
+    }
+    metadata[facet_by] <- lapply(metadata[facet_by], factor)
+  }
+  if (!is.null(scale_by)) {
+    variable <- as.numeric(metadata[, scale_by])
+    abund <- t(t(abund) * variable)
+  }
+  if (raw == FALSE) {
+    abund <- as.data.frame(sapply(abund, function(x) x/sum(x) * 
+                                    100))
+  }
+  suppressWarnings(if (!is.null(tax_add)) {
+    if (tax_add != tax_aggregate) {
+      tax <- data.frame(tax, Display = apply(tax[, c(tax_add, 
+                                                     tax_aggregate)], 1, paste, collapse = "; "))
+    }
+  }
+  else {
+    tax <- data.frame(tax, Display = tax[, tax_aggregate])
+  })
+  abund3 <- cbind.data.frame(Display = tax[, "Display"], abund) %>% 
+    tidyr::gather(key = Sample, value = Abundance, -Display) %>% 
+    as.data.table()
+  abund3 <- abund3[, `:=`("sum", sum(Abundance)), by = list(Display, 
+                                                            Sample)] %>% setkey(Display, Sample) %>% as.data.frame()
+  if (!is.null(facet_by)) {
+    ogroup <- group_by
+    group_by <- c(group_by, facet_by)
+  }
+  suppressWarnings(if (!is.null(group_by)) {
+    if (length(group_by) > 1) {
+      grp <- data.frame(Sample = metadata[, 1], Group = apply(metadata[, 
+                                                                       group_by], 1, paste, collapse = " "))
+      oldGroup <- unique(cbind.data.frame(metadata[, group_by], 
+                                          Group = grp$Group))
+    }
+    else {
+      grp <- data.frame(Sample = metadata[, 1], Group = metadata[, 
+                                                                 group_by])
+    }
+    abund3$Group <- grp$Group[match(abund3$Sample, grp$Sample)]
+    abund5 <- abund3
+  }
+  else {
+    abund5 <- data.frame(abund3, Group = abund3$Sample)
+  })
+  if (measure == "mean") {
+    abund6 <- data.table(abund5)[, `:=`(Abundance, mean(sum)), 
+                                 by = list(Display, Group)] %>% setkey(Display, Group) %>% 
+      unique() %>% as.data.frame()
+  }
+  if (measure == "max") {
+    abund6 <- data.table(abund5)[, `:=`(Abundance, max(sum)), 
+                                 by = list(Display, Group)] %>% setkey(Display, Group) %>% 
+      unique() %>% as.data.frame()
+  }
+  if (measure == "median") {
+    abund6 <- data.table(abund5)[, `:=`(Abundance, median(sum)), 
+                                 by = list(Display, Group)] %>% setkey(Display, Group) %>% 
+      unique() %>% as.data.frame()
+  }
+  if (measure == "mean") {
+    TotalCounts <- group_by(abund6, Display) %>% summarise(Abundance = sum(Abundance)) %>% 
+      arrange(desc(Abundance))
+  }
+  if (measure == "max") {
+    TotalCounts <- group_by(abund6, Display) %>% summarise(Abundance = max(Abundance)) %>% 
+      arrange(desc(Abundance))
+  }
+  if (measure == "median") {
+    TotalCounts <- group_by(abund6, Display) %>% summarise(Abundance = median(Abundance)) %>% 
+      arrange(desc(Abundance))
+  }
+  if (!is.null(sort_by)) {
+    TotalCounts <- filter(abund6, Group == sort_by) %>% 
+      arrange(desc(Abundance))
+  }
+  if (is.numeric(tax_show)) {
+    if (tax_show > nrow(TotalCounts)) {
+      tax_show <- nrow(TotalCounts)
+    }
+    abund7 <- filter(abund6, Display %in% TotalCounts$Display[1:tax_show])
+  }
+  if (!is.numeric(tax_show)) {
+    if (tax_show != "all") {
+      abund7 <- filter(abund6, Display %in% tax_show)
+    }
+    if (tax_show == "all") {
+      tax_show <- nrow(TotalCounts)
+      abund7 <- filter(abund6, Display %in% TotalCounts$Display[1:tax_show])
+    }
+  }
+  abund7 <- as.data.frame(abund7)
+  if (!is.null(normalise_by)) {
+    temp <- tidyr::spread(abund7, key = Group, value = Abundance)
+    temp1 <- cbind.data.frame(Display = temp$Display, temp[, 
+                                                           -1]/temp[, normalise_by])
+    abund7 <- tidyr::gather(temp1, key = Group, value = Abundance, 
+                            -Display)
+  }
+  if (is.null(order_y_by)) {
+    abund7$Display <- factor(abund7$Display, levels = rev(TotalCounts$Display))
+  }
+  if (!is.null(order_y_by)) {
+    if ((length(order_y_by) == 1) && (order_y_by != "cluster")) {
+      temp1 <- filter(abund7, Group == order_y_by) %>% 
+        group_by(Display) %>% summarise(Mean = mean(Abundance)) %>% 
+        arrange(desc(Mean))
+      abund7$Display <- factor(abund7$Display, levels = rev(temp1$Display))
+    }
+    if (length(order_y_by) > 1) {
+      abund7$Display <- factor(abund7$Display, levels = order_y_by)
+    }
+    if ((length(order_y_by) == 1) && (order_y_by == "cluster")) {
+      if (is.null(max_abundance)) {
+        max_abundance <- max(abund7$Abundance)
+      }
+      tdata <- mutate(abund7, Abundance = ifelse(Abundance < 
+                                                   min_abundance, min_abundance, Abundance), Abundance = ifelse(Abundance > 
+                                                                                                                  max_abundance, max_abundance, Abundance))
+      tdata <- dcast(tdata, Display ~ Group, value.var = "Abundance")
+      rownames(tdata) <- tdata$Display
+      tdata2 <- tdata[, -1]
+      tclust <- hclust(dist(tdata2))
+      tnames <- levels(droplevels(tdata$Display))[tclust$order]
+      abund7$Display <- factor(abund7$Display, levels = tnames)
+    }
+  }
+  if (!is.null(order_x_by)) {
+    if ((length(order_x_by) == 1) && (order_x_by != "cluster")) {
+      temp1 <- filter(abund7, Display == order_x_by) %>% 
+        group_by(Group) %>% summarise(Mean = mean(Abundance)) %>% 
+        arrange(desc(Mean))
+      abund7$Group <- factor(abund7$Group, levels = as.character(temp1$Group))
+    }
+    if (length(order_x_by) > 1) {
+      abund7$Group <- factor(abund7$Group, levels = order_x_by)
+    }
+    if ((length(order_x_by) == 1) && (order_x_by == "cluster")) {
+      if (is.null(max_abundance)) {
+        max_abundance <- max(abund7$Abundance)
+      }
+      tdata <- mutate(abund7, Abundance = ifelse(Abundance < 
+                                                   min_abundance, min_abundance, Abundance), Abundance = ifelse(Abundance > 
+                                                                                                                  max_abundance, max_abundance, Abundance))
+      tdata <- dcast(tdata, Display ~ Group, value.var = "Abundance")
+      rownames(tdata) <- tdata$Display
+      tdata2 <- tdata[, -1]
+      tclust <- hclust(dist(t(tdata2)))
+      tnames <- tclust$labels[tclust$order]
+      abund7$Group <- factor(abund7$Group, levels = tnames)
+    }
+  }
+  if (plot_na == FALSE) {
+    plot_na <- "grey50"
+  }
+  else {
+    if (!is.null(color_vector)) {
+      plot_na <- color_vector[1]
+    }
+    else {
+      plot_na <- "#67A9CF"
+    }
+  }
+  if (length(group_by) > 1) {
+    abund7 <- merge(abund7, oldGroup)
+  }
+  if (is.null(min_abundance)) {
+    min_abundance <- ifelse(min(abund7$Abundance) > 0.001, 
+                            min(abund7$Abundance), 0.001)
+  }
+  if (is.null(max_abundance)) {
+    max_abundance <- max(abund7$Abundance)
+  }
+  if (!textmap) {
+    p <- ggplot(abund7, aes_string(x = "Group", y = "Display", 
+                                   label = formatC("Abundance", format = "f", digits = 1))) + 
+      geom_tile(aes(fill = Abundance), colour = "white", 
+                size = 0.5) + theme(axis.text.y = element_text(size = 12, 
+                                                               color = "black", vjust = 0.4), axis.text.x = element_text(size = 10, 
+                                                                                                                         color = "black", vjust = 0.5, angle = 90, hjust = 1), 
+                                    axis.title = element_blank(), text = element_text(size = 8, 
+                                                                                      color = "black"), plot.margin = unit(c(1, 1, 
+                                                                                                                             1, 1), "mm"), title = element_text(size = 8), 
+                                    panel.background = element_blank())
+    if (!is.null(color_vector)) {
+      color.pal = color_vector
+    }
+    else {
+      color.pal = rev(brewer.pal(3, "RdBu"))
+    }
+    if (plot_values == TRUE) {
+      abund8 <- abund7
+      abund8$Abundance <- round(abund8$Abundance, round)
+      p <- p + geom_text(data = abund8, size = plot_values_size, 
+                         colour = "grey10", check_overlap = TRUE) + theme(legend.position = "none")
+    }
+    if (is.null(plot_legendbreaks)) {
+      p <- p + scale_fill_gradientn(colours = color.pal, 
+                                    trans = plot_colorscale, na.value = plot_na, 
+                                    oob = squish, limits = c(min_abundance, max_abundance))
+    }
+    if (!is.null(plot_legendbreaks)) {
+      p <- p + scale_fill_gradientn(colours = color.pal, 
+                                    trans = plot_colorscale, breaks = plot_legendbreaks, 
+                                    na.value = plot_na, oob = squish, limits = c(min_abundance, 
+                                                                                 max_abundance))
+    }
+    if (is.null(normalise_by)) {
+      p <- p + labs(x = "", y = "", fill = "% Read\nAbundance")
+    }
+    if (!is.null(normalise_by)) {
+      p <- p + labs(x = "", y = "", fill = "Relative")
+    }
+    if (!is.null(facet_by)) {
+      if (length(ogroup) > 1) {
+        p$data$Group <- apply(p$data[, ogroup], 1, paste, 
+                              collapse = " ")
+      }
+      else {
+        p$data$Group <- p$data[, ogroup]
+      }
+      if (plot_values == TRUE) {
+        if (length(ogroup) > 1) {
+          p$layers[[2]]$data$Group <- apply(p$layers[[2]]$data[, 
+                                                               ogroup], 1, paste, collapse = " ")
+        }
+        else {
+          p$layers[[2]]$data$Group <- p$layers[[2]]$data[, 
+                                                         ogroup]
+        }
+      }
+      p <- p + facet_grid(reformulate(facet_by), scales = "free_x", 
+                          space = "free")
+    }
+    return(p)
+  }
+  else if (textmap) {
+    textmap <- abund7[, c("Display", "Abundance", "Group")] %>% 
+      group_by(Group) %>% filter(!duplicated(Abundance, 
+                                             Group)) %>% spread(Group, Abundance) %>% arrange(desc(droplevels(Display)))
+    textmap <- data.frame(textmap[, -1], row.names = textmap$Display, 
+                          check.names = FALSE)
+    return(textmap)
+  }
+}
+
+##### amp_ordinate #####
+amp_ordinate <- function (data, filter_species = 0.1, type = "PCA", distmeasure = "none", 
+                          transform = "hellinger", constrain = NULL, x_axis = 1, y_axis = 2, 
+                          sample_color_by = NULL, sample_color_order = NULL, sample_shape_by = NULL, 
+                          sample_colorframe = FALSE, sample_colorframe_label = NULL, 
+                          sample_label_by = NULL, sample_label_size = 4, sample_label_segment_color = "black", 
+                          sample_point_size = 2, sample_trajectory = NULL, sample_trajectory_group = sample_trajectory, 
+                          sample_plotly = NULL, species_plot = FALSE, species_nlabels = 0, 
+                          species_label_taxonomy = "Genus", species_label_size = 3, 
+                          species_label_color = "grey10", species_rescale = FALSE, 
+                          species_point_size = 2, species_shape = 20, species_plotly = FALSE, 
+                          envfit_factor = NULL, envfit_numeric = NULL, envfit_signif_level = 0.001, 
+                          envfit_textsize = 3, envfit_color = "darkred", envfit_numeric_arrows_scale = 1, 
+                          envfit_show = TRUE, repel_labels = TRUE, opacity = 0.8, 
+                          tax_empty = "best", detailed_output = FALSE, ...) {
+  if (species_plotly == T & !is.null(sample_plotly)) {
+    stop("You can not use plotly for both species and samples in the same plot.")
+  }
+  if (species_plotly == T | !is.null(sample_plotly)) {
+    warning("geom_text_repel is not supported by plotly yet, forcing repel_labels = FALSE.")
+    repel_labels <- F
+  }
+  if (length(unique(data$metadata[, 1])) <= 2) 
+    stop("Ordination cannot be performed on 2 or fewer samples (the number of resulting axes will always be n-1, where n is the number of samples).")
+  data <- amp_rename(data = data, tax_empty = tax_empty)
+  abund_pct <- as.data.frame(sapply(data$abund, function(x) x/sum(x) * 
+                                      100))
+  rownames(abund_pct) <- rownames(data$abund)
+  abund_subset <- abund_pct[!apply(abund_pct, 1, function(row) all(row <= 
+                                                                     filter_species)), , drop = FALSE]
+  data$abund <- data$abund[which(rownames(data$abund) %in% 
+                                   rownames(abund_subset)), , drop = FALSE]
+  rownames(data$tax) <- data$tax$OTU
+  data$tax <- data$tax[which(rownames(data$tax) %in% rownames(abund_subset)), 
+                       , drop = FALSE]
+  type <- tolower(type)
+  if (!transform == "none" & transform != "sqrt") {
+    transform <- tolower(transform)
+    data$abund <- t(vegan::decostand(t(data$abund), method = transform))
+  }
+  else if (transform == "sqrt") {
+    data$abund <- t(sqrt(t(data$abund)))
+  }
+  if (any(type == c("nmds", "mmds", "pcoa", "dca"))) {
+    if (!distmeasure == "none") {
+      distmeasure <- tolower(distmeasure)
+      if (distmeasure == "jsd") {
+        dist.JSD <- function(inMatrix, pseudocount = 1e-06) {
+          KLD <- function(x, y) sum(x * log(x/y))
+          JSD <- function(x, y) sqrt(0.5 * KLD(x, (x + 
+                                                     y)/2) + 0.5 * KLD(y, (x + y)/2))
+          matrixColSize <- length(colnames(inMatrix))
+          matrixRowSize <- length(rownames(inMatrix))
+          colnames <- colnames(inMatrix)
+          resultsMatrix <- matrix(0, matrixColSize, 
+                                  matrixColSize)
+          inMatrix = apply(inMatrix, 1:2, function(x) ifelse(x == 
+                                                               0, pseudocount, x))
+          for (i in 1:matrixColSize) {
+            for (j in 1:matrixColSize) {
+              resultsMatrix[i, j] = JSD(as.vector(inMatrix[, 
+                                                           i]), as.vector(inMatrix[, j]))
+            }
+          }
+          rownames(resultsMatrix) <- colnames(resultsMatrix) <- colnames
+          resultsMatrix <- as.dist(resultsMatrix)
+          attr(resultsMatrix, "method") <- "dist"
+          return(resultsMatrix)
+        }
+        cat("Calculating the Jensen-Shannon Divergence (JSD) distance matrix may take a long time.")
+        inputmatrix <- dist.JSD(data$abund)
+      }
+      else if (any(distmeasure == c("manhattan", "euclidean", 
+                                    "canberra", "bray", "kulczynski", "jaccard", 
+                                    "gower", "altGower", "morisita", "horn", "mountford", 
+                                    "raup", "binomial", "chao", "cao", "mahalanobis"))) {
+        inputmatrix <- vegan::vegdist(t(data$abund), 
+                                      method = distmeasure)
+      }
+    }
+    else if (distmeasure == "none") {
+      warning("No distance measure selected, using raw data. If this is not deliberate, please provide one with the argument: distmeasure.")
+      inputmatrix <- t(data$abund)
+    }
+    if (transform != "none" & distmeasure != "none") {
+      warning("Using both transformation AND a distance measure is not recommended for distance-based ordination (nMDS/PCoA/DCA). If this is not deliberate, consider transform = \"none\".")
+    }
+  }
+  else if (any(type == c("pca", "rda", "ca", "cca"))) {
+    inputmatrix <- t(data$abund)
+  }
+  if (type == "pca") {
+    model <- vegan::rda(inputmatrix, ...)
+    x_axis_name <- paste0("PC", x_axis)
+    y_axis_name <- paste0("PC", y_axis)
+    totalvar <- round(model$CA$eig/model$tot.chi * 100, 
+                      1)
+    sitescores <- vegan::scores(model, display = "sites", 
+                                choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", 
+                                   choices = c(x_axis, y_axis))
+  }
+  else if (type == "rda") {
+    if (is.null(constrain)) 
+      stop("Argument constrain must be provided when performing constrained/canonical analysis.")
+    codestring <- paste0("rda(inputmatrix~", paste(constrain, 
+                                                   collapse = "+"), ", data$metadata, ...)")
+    model <- eval(parse(text = codestring))
+    x_axis_name <- paste0("RDA", x_axis)
+    if (model$CCA$rank <= 1) {
+      y_axis_name <- "PC1"
+      totalvar <- c(round(model$CCA$eig/model$tot.chi * 
+                            100, 1), round(model$CA$eig/model$tot.chi * 
+                                             100, 1))
+      constrainedvar <- c(round(model$CA$eig/model$CA$tot.chi * 
+                                  100, 1))
+    }
+    else if (model$CCA$rank > 1) {
+      y_axis_name <- paste0("RDA", y_axis)
+      totalvar <- c(round(model$CCA$eig/model$tot.chi * 
+                            100, 1), round(model$CA$eig/model$tot.chi * 
+                                             100, 1))
+      constrainedvar <- c(round(model$CCA$eig/model$CCA$tot.chi * 
+                                  100, 1))
+    }
+    sitescores <- vegan::scores(model, display = "sites", 
+                                choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", 
+                                   choices = c(x_axis, y_axis))
+  }
+  else if (type == "nmds") {
+    model <- vegan::metaMDS(inputmatrix, trace = FALSE, 
+                            ...)
+    x_axis_name <- paste0("NMDS", x_axis)
+    y_axis_name <- paste0("NMDS", y_axis)
+    sitescores <- vegan::scores(model, display = "sites")
+    if (!length(model$species) > 1) {
+      speciesscores <- warning("Speciesscores are not available.")
+    }
+    else {
+      speciesscores <- vegan::scores(model, display = "species", 
+                                     choices = c(x_axis, y_axis))
+    }
+  }
+  else if (type == "mmds" | type == "pcoa") {
+    model <- ape::pcoa(inputmatrix, ...)
+    x_axis_name <- paste0("PCo", x_axis)
+    y_axis_name <- paste0("PCo", y_axis)
+    totalvar <- round(model$values$Relative_eig * 100, 1)
+    names(totalvar) <- c(paste0("PCo", seq(1:length(totalvar))))
+    sitescores <- as.data.frame(model$vectors)
+    colnames(sitescores) <- c(paste0("PCo", seq(1:length(sitescores))))
+    speciesscores <- warning("Speciesscores are not available.")
+  }
+  else if (type == "ca") {
+    model <- vegan::cca(inputmatrix, ...)
+    x_axis_name <- paste0("CA", x_axis)
+    y_axis_name <- paste0("CA", y_axis)
+    totalvar <- round(model$CA$eig/model$tot.chi * 100, 
+                      1)
+    sitescores <- vegan::scores(model, display = "sites", 
+                                choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", 
+                                   choices = c(x_axis, y_axis))
+  }
+  else if (type == "cca") {
+    if (is.null(constrain)) 
+      stop("Argument constrain must be provided when performing constrained/canonical analysis.")
+    codestring <- paste0("cca(inputmatrix~", paste(constrain, 
+                                                   collapse = "+"), ", data$metadata, ...)")
+    model <- eval(parse(text = codestring))
+    x_axis_name <- paste0("CCA", x_axis)
+    if (model$CCA$rank <= 1) {
+      y_axis_name <- "CA1"
+      totalvar <- c(round(model$CCA$eig/model$tot.chi * 
+                            100, 1), round(model$CA$eig/model$tot.chi * 
+                                             100, 1))
+      constrainedvar <- c(round(model$CA$eig/model$CA$tot.chi * 
+                                  100, 1))
+    }
+    else if (model$CCA$rank > 1) {
+      y_axis_name <- paste0("CCA", y_axis)
+      totalvar <- c(round(model$CCA$eig/model$tot.chi * 
+                            100, 1), round(model$CA$eig/model$tot.chi * 
+                                             100, 1))
+      constrainedvar <- c(round(model$CCA$eig/model$CCA$tot.chi * 
+                                  100, 1))
+    }
+    sitescores <- vegan::scores(model, display = "sites", 
+                                choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", 
+                                   choices = c(x_axis, y_axis))
+  }
+  else if (type == "dca") {
+    model <- vegan::decorana(inputmatrix, ...)
+    x_axis_name <- paste0("DCA", x_axis)
+    y_axis_name <- paste0("DCA", y_axis)
+    sitescores <- vegan::scores(model, display = "sites", 
+                                choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", 
+                                   choices = c(x_axis, y_axis))
+  }
+  dsites <- cbind.data.frame(data$metadata, sitescores)
+  if (!is.null(sample_color_order)) {
+    dsites[, sample_color_by] <- factor(dsites[, sample_color_by], 
+                                        levels = sample_color_order)
+  }
+  if (length(speciesscores) > 1) {
+    dspecies <- merge(data.frame(speciesscores, OTU = rownames(speciesscores)), 
+                      data$tax, by.x = "OTU")
+    dspecies$dist <- dspecies[, x_axis_name]^2 + dspecies[, 
+                                                          y_axis_name]^2
+    dspecies <- dplyr::arrange(dspecies, desc(dist))
+    rownames(dspecies) <- dspecies$OTU
+    if (species_rescale == TRUE) {
+      maxx <- max(abs(dsites[, x_axis_name]))/max(abs(dspecies[, 
+                                                               x_axis_name]))
+      dspecies[, x_axis_name] <- dspecies[, x_axis_name] * 
+        maxx * 0.8
+      maxy <- max(abs(dsites[, y_axis_name]))/max(abs(dspecies[, 
+                                                               y_axis_name]))
+      dspecies[, y_axis_name] <- dspecies[, y_axis_name] * 
+        maxy * 0.8
+    }
+  }
+  else {
+    dspecies = NULL
+  }
+  plot <- ggplot(dsites, aes_string(x = x_axis_name, y = y_axis_name, 
+                                    color = sample_color_by, shape = sample_shape_by))
+  if (sample_colorframe == TRUE) {
+    if (is.null(sample_color_by)) 
+      stop("Please provide the argument sample_color_by.")
+    splitData <- split(dsites, dsites[, sample_color_by]) %>% 
+      lapply(function(df) {
+        df[chull(df[, x_axis_name], df[, y_axis_name]), 
+           ]
+      })
+    hulls <- do.call(rbind, splitData)
+    plot <- plot + geom_polygon(data = hulls, aes_string(fill = sample_color_by, 
+                                                         group = sample_color_by), alpha = 0.2 * opacity)
+  }
+  if (!is.null(sample_plotly)) {
+    if (length(sample_plotly) > 1) {
+      data_plotly <- apply(data$metadata[, sample_plotly], 
+                           1, paste, collapse = "<br>")
+    }
+    else if (sample_plotly == "all" | sample_plotly == TRUE) {
+      data_plotly <- apply(data$metadata[, ], 1, paste, 
+                           collapse = "<br>")
+    }
+    else {
+      data_plotly <- paste0(sample_plotly, ": ", data$metadata[, 
+                                                               sample_plotly])
+    }
+    plot <- plot + suppressWarnings(geom_point(size = 2, 
+                                               alpha = opacity, aes(text = data_plotly))) + theme_minimal() + 
+      theme(axis.line = element_line(colour = "black", 
+                                     size = 0.5))
+  }
+  else {
+    plot <- plot + geom_point(size = sample_point_size, 
+                              alpha = opacity) + theme_minimal() + theme(axis.line = element_line(colour = "black", 
+                                                                                                  size = 0.5))
+  }
+  if (type == "pca" | type == "ca" | type == "pcoa" | type == 
+      "mmds") {
+    plot <- plot + xlab(paste(x_axis_name, " [", totalvar[x_axis_name], 
+                              "%]", sep = "")) + ylab(paste(y_axis_name, " [", 
+                                                            totalvar[y_axis_name], "%]", sep = ""))
+  }
+  else if (type == "rda" | type == "cca") {
+    if (model$CCA$rank > 1) {
+      plot <- plot + xlab(paste(x_axis_name, " [", totalvar[x_axis_name], 
+                                "% / ", constrainedvar[x_axis_name], "%]", sep = "")) + 
+        ylab(paste(y_axis_name, " [", totalvar[y_axis_name], 
+                   "% / ", constrainedvar[y_axis_name], "%]", 
+                   sep = ""))
+    }
+    else if (model$CCA$rank <= 1) {
+      plot <- plot + xlab(paste(x_axis_name, " [", totalvar[x_axis_name], 
+                                "%]", sep = "")) + ylab(paste(y_axis_name, " [", 
+                                                              totalvar[y_axis_name], "% / ", constrainedvar[y_axis_name], 
+                                                              "%]", sep = ""))
+    }
+  }
+  else if (type == "nmds") {
+    plot <- plot + annotate("text", size = 3, x = Inf, y = Inf, 
+                            hjust = 1, vjust = 1, label = paste0("Stress value = ", 
+                                                                 round(model$stress, 3)))
+  }
+  if (species_plot == TRUE) {
+    if (species_plotly == T) {
+      data_plotly <- paste("Kingdom: ", data$tax[, 1], 
+                           "<br>", "Phylum: ", data$tax[, 2], "<br>", "Class: ", 
+                           data$tax[, 3], "<br>", "Order: ", data$tax[, 
+                                                                      4], "<br>", "Family: ", data$tax[, 5], "<br>", 
+                           "Genus: ", data$tax[, 6], "<br>", "Species: ", 
+                           data$tax[, 7], "<br>", "OTU: ", data$tax[, 8], 
+                           sep = "")
+      plot <- plot + geom_point(data = dspecies, color = "darkgrey", 
+                                shape = species_shape, size = species_point_size - 
+                                  1, alpha = opacity, aes(text = data_plotly))
+    }
+    else {
+      plot <- plot + geom_point(data = dspecies, color = "darkgrey", 
+                                shape = species_shape, size = species_point_size, 
+                                alpha = opacity)
+    }
+  }
+  if (!is.null(sample_colorframe_label)) {
+    temp <- data.frame(group = dsites[, sample_colorframe_label], 
+                       x = dsites[, x_axis_name], y = dsites[, y_axis_name]) %>% 
+      group_by(group) %>% summarise(cx = mean(x), cy = mean(y)) %>% 
+      as.data.frame()
+    temp2 <- merge(dsites, temp, by.x = sample_colorframe_label, 
+                   by.y = "group")
+    temp3 <- temp2[!duplicated(temp2[, sample_colorframe_label]), 
+                   ]
+    if (repel_labels == T) {
+      plot <- plot + ggrepel::geom_text_repel(data = temp3, 
+                                              aes_string(x = "cx", y = "cy", label = sample_colorframe_label), 
+                                              size = 3, color = "black", fontface = 2)
+    }
+    else {
+      plot <- plot + geom_text(data = temp3, aes_string(x = "cx", 
+                                                        y = "cy", label = sample_colorframe_label), 
+                               size = 3, color = "black", fontface = 2)
+    }
+  }
+  if (!is.null(sample_trajectory)) {
+    traj <- dsites[order(dsites[, sample_trajectory]), ]
+    plot <- plot + geom_path(data = traj, aes_string(group = sample_trajectory_group))
+  }
+  if (!is.null(sample_label_by)) {
+    if (repel_labels == T) {
+      plot <- plot + ggrepel::geom_text_repel(aes_string(label = sample_label_by), 
+                                              size = sample_label_size, color = "grey40", 
+                                              segment.color = sample_label_segment_color)
+    }
+    else {
+      plot <- plot + geom_text(aes_string(label = sample_label_by), 
+                               size = sample_label_size, color = "grey40", 
+                               segment.color = sample_label_segment_color)
+    }
+  }
+  if (species_nlabels > 0) {
+    if (repel_labels == T) {
+      plot <- plot + ggrepel::geom_text_repel(data = dspecies[1:species_nlabels, 
+                                                              ], aes_string(x = x_axis_name, y = y_axis_name, 
+                                                                            label = species_label_taxonomy), colour = species_label_color, 
+                                              size = species_label_size, fontface = 4, inherit.aes = FALSE)
+    }
+    else {
+      plot <- plot + geom_text(data = dspecies[1:species_nlabels, 
+                                               ], aes_string(x = x_axis_name, y = y_axis_name, 
+                                                             label = species_label_taxonomy), colour = species_label_color, 
+                               size = species_label_size, fontface = 4, inherit.aes = FALSE)
+    }
+  }
+  if (!is.null(envfit_factor)) {
+    evf_factor_model <- envfit(model, data$metadata[, envfit_factor, 
+                                                    drop = FALSE], permutations = 999, choices = c(x_axis_name, 
+                                                                                                   y_axis_name))
+    evf_factor_data <- data.frame(Name = rownames(evf_factor_model$factors$centroids), 
+                                  Variable = evf_factor_model$factors$var.id, evf_factor_model$factors$centroids, 
+                                  pval = evf_factor_model$factors$pvals) %>% subset(pval <= 
+                                                                                      envfit_signif_level)
+    if (nrow(evf_factor_data) > 0 & envfit_show == TRUE) {
+      if (repel_labels == T) {
+        plot <- plot + ggrepel::geom_text_repel(data = evf_factor_data, 
+                                                aes_string(x = x_axis_name, y = y_axis_name, 
+                                                           label = "Name"), colour = envfit_color, 
+                                                inherit.aes = FALSE, size = envfit_textsize, 
+                                                fontface = "bold")
+      }
+      else {
+        plot <- plot + geom_text(data = evf_factor_data, 
+                                 aes_string(x = x_axis_name, y = y_axis_name, 
+                                            label = "Name"), colour = envfit_color, 
+                                 inherit.aes = FALSE, size = envfit_textsize, 
+                                 fontface = "bold")
+      }
+    }
+    if (nrow(evf_factor_data) == 0) {
+      warning("No environmental variables fit below the chosen significant level.")
+    }
+  }
+  else {
+    evf_factor_model <- NULL
+  }
+  if (!is.null(envfit_numeric)) {
+    evf_numeric_model <- envfit(model, data$metadata[, envfit_numeric, 
+                                                     drop = FALSE], permutations = 999, choices = c(x_axis_name, 
+                                                                                                    y_axis_name))
+    evf_numeric_data <- data.frame(Name = rownames(evf_numeric_model$vectors$arrows), 
+                                   evf_numeric_model$vectors$arrows * sqrt(evf_numeric_model$vectors$r) * 
+                                     envfit_numeric_arrows_scale, pval = evf_numeric_model$vectors$pvals) %>% 
+      subset(pval <= envfit_signif_level)
+    if (nrow(evf_numeric_data) > 0 & envfit_show == TRUE) {
+      plot <- plot + geom_segment(data = evf_numeric_data, 
+                                  aes_string(x = 0, xend = x_axis_name, y = 0, 
+                                             yend = y_axis_name), arrow = arrow(length = unit(3, 
+                                                                                              "mm")), colour = "darkred", size = 1, inherit.aes = FALSE) + 
+        geom_text(data = evf_numeric_data, aes_string(x = x_axis_name, 
+                                                      y = y_axis_name, label = "Name"), colour = envfit_color, 
+                  inherit.aes = FALSE, size = envfit_textsize, 
+                  hjust = 1.2, vjust = 1.2, fontface = "bold")
+    }
+    if (nrow(evf_numeric_data) == 0) {
+      warning("No environmental variables fit below the chosen significant level.")
+    }
+  }
+  else {
+    evf_numeric_model <- NULL
+  }
+  if (!is.null(sample_plotly)) {
+    plotly::ggplotly(plot, tooltip = "text") %>% layout(showlegend = FALSE)
+  }
+  else if (species_plotly == T) {
+    plotly::ggplotly(plot, tooltip = "text") %>% layout(showlegend = FALSE)
+  }
+  else if (!detailed_output) {
+    return(plot)
+  }
+  else if (detailed_output) {
+    if (type == "nmds") {
+      screeplot <- NULL
+    }
+    else {
+      if (type == "mmds" | type == "pcoa") {
+        if (length(model$values$Relative_eig) > 10) {
+          unconstrained_eig <- model$values$Relative_eig[1:10] * 
+            100
+        }
+        else {
+          unconstrained_eig <- model$values$Relative_eig * 
+            100
+        }
+        screeplot <- ggplot(data.frame(axis = factor(as.character(c(1:length(unconstrained_eig))), 
+                                                     levels = c(1:length(unconstrained_eig))), 
+                                       eigenvalues = unconstrained_eig), aes(x = axis, 
+                                                                             y = eigenvalues)) + geom_col() + theme_minimal() + 
+          xlab("Axis (max. 10 axes will be shown)") + 
+          ylab("Eigenvalue in percent of total inertia")
+      }
+      else {
+        unconstrained_eig <- model$CA$eig/model$tot.chi * 
+          100
+        constrained_eig <- model$CCA$eig/model$tot.chi * 
+          100
+        if (length(constrained_eig) > 10) {
+          constrained_eig <- constrained_eig[1:10]
+        }
+        if (length(unconstrained_eig) > 10) {
+          unconstrained_eig <- unconstrained_eig[1:10]
+        }
+        eigenvalues <- c(constrained_eig, unconstrained_eig)
+        screeplot <- ggplot(data.frame(axis = factor(names(eigenvalues), 
+                                                     levels = names(eigenvalues)), eigenvalues = eigenvalues), 
+                            aes(x = axis, y = eigenvalues)) + geom_col() + 
+          geom_text(label = round(eigenvalues, 2), vjust = -1, 
+                    size = 3) + theme_minimal() + theme(axis.text.x = element_text(angle = 90, 
+                                                                                   hjust = 1)) + xlab("Axis (max. 10 axes will be shown)") + 
+          ylab("Eigenvalue in percent of total inertia")
+      }
+    }
+    return(list(plot = plot, screeplot = screeplot, model = model, 
+                dsites = dsites, dspecies = dspecies, evf_factor_model = evf_factor_model, 
+                evf_numeric_model = evf_numeric_model))
+  }
+}
+
+##### amp_boxplot #####
+amp_boxplot <- function (data, group_by = "Sample", sort_by = "median", plot_type = "boxplot", 
+                         point_size = 1, tax_aggregate = "Genus", tax_add = NULL, 
+                         tax_show = 20, tax_empty = "best", tax_class = NULL, order_group = NULL, 
+                         order_y = NULL, plot_flip = FALSE, plot_log = FALSE, adjust_zero = NULL, 
+                         raw = FALSE, detailed_output = FALSE) {
+  data <- amp_rename(data = data, tax_class = tax_class, tax_empty = tax_empty, 
+                     tax_level = tax_aggregate)
+  if (!is.null(tax_aggregate) & !is.null(tax_add)) {
+    if (tax_aggregate == tax_add) {
+      stop("tax_aggregate and tax_add cannot be the same")
+    }
+  }
+  abund <- data[["abund"]]
+  tax <- data[["tax"]]
+  metadata <- data[["metadata"]]
+  if (raw == FALSE) {
+    abund <- as.data.frame(sapply(abund, function(x) x/sum(x) * 
+                                    100))
+  }
+  suppressWarnings(if (!is.null(tax_add)) {
+    if (tax_add != tax_aggregate) {
+      tax <- data.frame(tax, Display = apply(tax[, c(tax_add, 
+                                                     tax_aggregate)], 1, paste, collapse = "; "))
+    }
+  }
+  else {
+    tax <- data.frame(tax, Display = tax[, tax_aggregate])
+  })
+  abund3 <- cbind.data.frame(Display = tax[, "Display"], abund) %>% 
+    tidyr::gather(key = Sample, value = Abundance, -Display) %>% 
+    as.data.table()
+  abund3 <- abund3[, `:=`("Abundance", sum(Abundance)), by = list(Display, 
+                                                                  Sample)] %>% setkey(Display, Sample) %>% unique()
+  suppressWarnings(if (group_by != "Sample") {
+    if (length(group_by) > 1) {
+      grp <- data.frame(Sample = rownames(metadata), Group = apply(metadata[, 
+                                                                            group_by], 1, paste, collapse = " "))
+    }
+    else {
+      grp <- data.frame(Sample = rownames(metadata), Group = metadata[, 
+                                                                      group_by])
+    }
+    abund3$Group <- grp$Group[match(abund3$Sample, grp$Sample)]
+    abund5 <- abund3
+  }
+  else {
+    abund5 <- data.frame(abund3, Group = abund3$Sample)
+  })
+  TotalCounts <- group_by(abund5, Display) %>% summarise(Median = median(Abundance), 
+                                                         Total = sum(Abundance), Mean = mean(Abundance))
+  if (sort_by == "median") {
+    TotalCounts %<>% arrange(desc(Median)) %>% as.data.frame()
+  }
+  if (sort_by == "mean") {
+    TotalCounts %<>% arrange(desc(Mean)) %>% as.data.frame()
+  }
+  if (sort_by == "total") {
+    TotalCounts %<>% arrange(desc(Total)) %>% as.data.frame()
+  }
+  abund5$Display <- factor(abund5$Display, levels = rev(TotalCounts$Display))
+  if (is.numeric(tax_show)) {
+    if (tax_show > nrow(TotalCounts)) {
+      tax_show <- nrow(TotalCounts)
+    }
+    abund7 <- subset(abund5, abund5$Display %in% TotalCounts[1:tax_show, 
+                                                             "Display"])
+  }
+  if (!is.numeric(tax_show)) {
+    if (length(tax_show) > 1) {
+      abund7 <- subset(abund5, as.character(abund5$Display) %in% 
+                         tax_show)
+    }
+    if ((length(tax_show) == 1) && (tax_show != "all")) {
+      abund7 <- subset(abund5, as.character(abund5$Display) %in% 
+                         tax_show)
+    }
+    if ((length(tax_show) == 1) && (tax_show == "all")) {
+      tax_show <- nrow(TotalCounts)
+      abund7 <- subset(abund5, abund5$Display %in% TotalCounts[1:tax_show, 
+                                                               "Display"])
+    }
+  }
+  if (!is.null(adjust_zero)) {
+    abund7$Abundance[abund7$Abundance == 0] <- adjust_zero
+  }
+  if (length(order_y) > 1) {
+    abund7$Display <- factor(abund7$Display, levels = order_y)
+    abund7 <- subset(abund7, !is.na(Display))
+  }
+  if (group_by == "Sample") {
+    p <- ggplot(abund7, aes(x = Display, y = Abundance))
+  }
+  if (group_by != "Sample") {
+    if (!is.null(order_group)) {
+      abund7$Group <- factor(abund7$Group, levels = rev(order_group))
+    }
+    p <- ggplot(abund7, aes(x = Display, y = Abundance, 
+                            color = Group))
+  }
+  p <- p + ylab("Read Abundance (%)") + guides(col = guide_legend(reverse = TRUE)) + 
+    xlab("") + theme_classic() + theme(panel.grid.major.x = element_line(color = "grey90"), 
+                                       panel.grid.major.y = element_line(color = "grey90"))
+  if (plot_flip == F) {
+    p <- p + coord_flip()
+  }
+  else {
+    p <- p + theme(axis.text.x = element_text(angle = 90, 
+                                              hjust = 1, vjust = 0.5))
+  }
+  if (plot_type == "point") {
+    p <- p + geom_point(size = point_size)
+  }
+  if (plot_type == "boxplot") {
+    p <- p + geom_boxplot(outlier.size = point_size)
+  }
+  if (plot_log == TRUE) {
+    p <- p + scale_y_log10()
+  }
+  if (detailed_output) {
+    return(list(plot = p, data = abund7))
+  }
+  else return(p)
 }

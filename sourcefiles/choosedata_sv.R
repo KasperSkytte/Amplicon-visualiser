@@ -19,34 +19,91 @@ loaded_data <- reactive({
        !is.data.frame(loadedObjects[["otutable"]])) {
       stop("The .RData file must contain two dataframes with the exact names: 'otutable' and 'metadata'")
     }
-    loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata, percent = TRUE)
-  } else if(input$chosendata == "Upload data" & input$upl_type == "Two files (metadata and otutable)") {
+    loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata)
+    #at some point it will be made so that the uploaded RData contains many objects loaded with amp_load which should be listed here
+    #list of R objects if single file upload
+    #output$loadedobjectslist <- renderUI({
+    #  if(input$chosendata == "Upload data" & input$upl_type == "One file (.RData)") {
+    #    selectInput(inputId = "loadedobjectslist",
+    #                label = "Select an R object",
+    #                choices = "loadedObjects")
+    #  }
+    #})
+  } else if(input$chosendata == "Upload data" & input$upl_type == "Two files (metadata and OTU table)") {
     file_otutable <- input$upl_otutable
     file_metadata <- input$upl_metadata
     
-    #HALT if the 2 files are not uploaded!
-    if (is.null(file_otutable) | is.null(file_metadata))
+    #stop if no otutable uploaded!
+    if (is.null(file_otutable))
       return(NULL)
     
     #load otutable
-    otutable <- read.delim(file_otutable$datapath, sep = "\t", header = TRUE, check.names = FALSE, row.names = 1)
+    #Check which CSV separator and CSV decimal
+    if(input$csvsep == "Tabular" & input$csvdec == "Dot '.'") {
+      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = "\t", dec = ".")
+    } else if(input$csvsep == "Tabular" & input$csvdec == "Comma ','") {
+      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = "\t", dec = ",")
+    } else if(input$csvsep == "Comma ','" & input$csvdec == "Dot '.'") {
+      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ",", dec = ".")
+    } else if(input$csvsep == "Comma ','" & input$csvdec == "Comma ','") {
+      stop("Separator and decimal must be different")
+    } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Dot '.'") {
+      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ";", dec = ".")
+    } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Comma ','") {
+      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ";", dec = ",")
+    }
     
-    #load metadata, check file extension
-    ext <- tools::file_ext(file_metadata$name)
-    if(ext == "xlsx" | ext == "xls") {
-      file.rename(file_metadata$datapath,
-                  paste(file_metadata$datapath, ext, sep="."))
-      metadata <- as.data.frame(read_excel(paste(file_metadata$datapath, ext, sep=".")), na = "")
-    } else if(ext == "csv" | ext == "txt") {
-      metadata <- read.delim(file_metadata$datapath, sep = "\t", header = TRUE, check.names = TRUE)
-    } else stop("Currently only supports metadata from Microsoft Excel files and .csv files")
-    
-    loadedObjects <- amp_load(otutable, metadata, percent = TRUE)
+    #load metadata
+    #if no metadata is uploaded, create dummy metadata
+    if(is.null(file_metadata)) {
+      metadata <- data.frame(SampleID = colnames(otutable)[1:(ncol(otutable)-7)], Dummycolumn = "No metadata provided")
+      rownames(metadata) <- metadata$SampleID
+      warning("No metadata provided, dummy metadata created.")
+    } else if(!is.null(file_metadata)) {
+      #check file extension
+      ext <- tools::file_ext(file_metadata$name)
+      if(ext == "xlsx" | ext == "xls") {
+        file.rename(file_metadata$datapath,
+                    paste(file_metadata$datapath, ext, sep="."))
+        metadata <- as.data.frame(read_excel(paste(file_metadata$datapath, ext, sep=".")), na = "")
+      } else if(ext == "csv" | ext == "txt") {
+        #Check which CSV separator and CSV decimal
+        if(input$csvsep == "Tabular" & input$csvdec == "Dot '.'") {
+          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = "\t", dec = ".")
+        } else if(input$csvsep == "Tabular" & input$csvdec == "Comma ','") {
+          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = "\t", dec = ",")
+        } else if(input$csvsep == "Comma ','" & input$csvdec == "Dot '.'") {
+          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ",", dec = ".")
+        } else if(input$csvsep == "Comma ','" & input$csvdec == "Comma ','") {
+          stop("Separator and decimal must be different")
+        } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Dot '.'") {
+          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ";", dec = ".")
+        } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Comma ','") {
+          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ";", dec = ",")
+        }
+      } else stop("Only supports metadata from Microsoft Excel files or CSV files")
+    }
+    loadedObjects <- amp_load(otutable, metadata)
   } else return(NULL)
   
   #return the loaded data list
   return(loadedObjects)
 })
+
+## Minimal example download handlers
+output$dlexamplemetadata <- downloadHandler(
+  filename = "metadata.xlsx",
+  content <- function(file) {
+    file.copy("minimal example data/metadata.xlsx", file)
+  }
+)
+output$dlexampleotutable <- downloadHandler(
+  filename = "otutable.csv",
+  content <- function(file) {
+    file.copy("minimal example data/otutable.csv", file)
+  }
+)
+
 
 ################## Data tables and subsetting ##################
 #metadata table
@@ -60,7 +117,7 @@ output$filtermetadata <- DT::renderDataTable(
   options = list(pageLength = 10,
                  dom = "Bfrtip",
                  buttons = I("colvis"),
-                 autoWidth = TRUE,
+                 autoWidth = FALSE,
                  scrollX = TRUE,
                  lengthMenu = c(5, 10, 25, 50, 100),
                  colReorder = TRUE,
@@ -78,8 +135,8 @@ output$filtertaxa <- DT::renderDataTable(
   rownames = FALSE,
   selection = "none", 
   options = list(pageLength = 10,
-                 autoWidth = TRUE,
-                 scrollX = FALSE,
+                 autoWidth = FALSE,
+                 scrollX = TRUE,
                  lengthMenu = c(5, 10, 25, 50, 100),
                  columnDefs = list(list(width = '125px', targets = "_all"))
   )

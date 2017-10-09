@@ -10,11 +10,10 @@ data_variables_selected <- reactive({
   }
 })
 
-
 ################## Heatmap ##################
-output$heatmap_UI_tax.group <- renderUI({
+output$heatmap_UI_tax_group <- renderUI({
   selectizeInput(
-    inputId = "heatmap_tax.group",
+    inputId = "heatmap_tax_group",
     label = "Choose grouping",
     choices = data_variables(),
     selected = data_variables_selected(),
@@ -23,198 +22,134 @@ output$heatmap_UI_tax.group <- renderUI({
   )
 })
 
-#subtract the chosen tax.aggregate input from tax.add input, because an error occurs if the same is chosen 
-output$heatmap_UI_tax.add <- renderUI({
+#subtract the chosen tax_aggregate input from tax_add input, because an error occurs if the same is chosen 
+output$heatmap_UI_tax_add <- renderUI({
   taxvector <- c(Phylum = "Phylum", Class = "Class", Order = "Order", Family = "Family", Genus = "Genus", Species = "Species")
   
   checkboxGroupInput(
-    inputId = "heatmap_tax.add",
+    inputId = "heatmap_tax_add",
     label = "Extra taxonomic information",
-    choices = taxvector[!taxvector %in% c(input$heatmap_tax.aggregate)],
+    choices = taxvector[!taxvector %in% c(input$heatmap_tax_aggregate)],
     selected = NULL
  )
 })
 
 plot_heatmap <- eventReactive(input$renderplot_heatmap, {
-  test <<- c(input$heatmap_colorvector)
-  
   #A group is a must
-  if(is.null(input$heatmap_tax.group)) return(NULL)
+  if(is.null(input$heatmap_tax_group)) return(NULL)
   order_x <- if(input$heatmap_cluster_x) {"cluster"}
   order_y <- if(input$heatmap_cluster_y) {"cluster"}
   amp_heatmap(data = loaded_data_subset(),
-              group = input$heatmap_tax.group, 
-              #tax.class = "p__Proteobacteria",
-              tax.add = input$heatmap_tax.add,
-              tax.aggregate = input$heatmap_tax.aggregate,
-              order.x = order_x, 
-              order.y = order_y,
-              #tax.empty = "OTU", #PISS SLOW
-              #min.abundance = 0.1,
-              tax.show = input$heatmap_tax.show,
-              plot.numbers = input$heatmap_plot.numbers,
-              plot.colorscale = "log10",
-              color.vector = unlist(strsplit(input$heatmap_colorvector, ","))
-) + theme_light() +
-  theme(axis.text.x = element_text(angle = 45, size=12, hjust = 1), 
-        axis.text.y=element_text(size=10)) 
+              group_by = input$heatmap_tax_group, 
+              tax_add = input$heatmap_tax_add,
+              tax_aggregate = input$heatmap_tax_aggregate,
+              order_x = order_x, 
+              order_y = order_y,
+              tax_show = input$heatmap_tax_show,
+              plot_values = input$heatmap_plot_values,
+              plot_colorscale = "log10",
+              color_vector = unlist(strsplit(input$heatmap_colorvector, ","))
+  )
 })
 
 output$heatmap <- renderPlot({
   plot_heatmap()
 })
 
-################## Rank Abundance ##################
-output$RA_UI_group <- renderUI({
+################## Boxplot ##################
+output$boxplot_UI_group <- renderUI({
   selectInput(
-    inputId = "RA_group",
+    inputId = "boxplot_group",
     label = "Select group variable",
     choices = data_variables(),
     selected = data_variables_selected()
   )
 })
 
-
-plot_RA <- eventReactive(input$renderplot_RA ,{
-  #A group is a must
-  if(is.null(input$RA_group)) return(NULL)
+#subtract the chosen tax_aggregate input from tax_add input, because an error occurs if the same is chosen 
+output$boxplot_UI_tax_add <- renderUI({
+  taxvector <- c(Phylum = "Phylum", Class = "Class", Order = "Order", Family = "Family", Genus = "Genus", Species = "Species")
   
-  if(input$RA_flip) {
-    amp_rabund(loaded_data_subset(),
-               tax.aggregate = "Genus",
-               tax.show = input$RA_tax.show,
-               tax.add = input$RA_tax.add,
-               plot.flip = input$RA_flip,
-               group = input$RA_group
+  checkboxGroupInput(
+    inputId = "boxplot_tax_add",
+    label = "Extra taxonomic information",
+    choices = taxvector[!taxvector %in% c(input$boxplot_tax_aggregate)],
+    selected = NULL
+  )
+})
+
+plot_boxplot <- eventReactive(input$renderplot_boxplot ,{
+  #A group is a must
+  if(is.null(input$boxplot_group)) return(NULL)
+  
+  if(input$boxplot_flip) {
+    amp_boxplot(loaded_data_subset(),
+               tax_aggregate = input$boxplot_tax_aggregate,
+               tax_show = input$boxplot_tax_show,
+               tax_add = input$boxplot_tax_add,
+               plot_flip = input$boxplot_flip,
+               group = input$boxplot_group
     ) + theme_light() +
       theme(axis.text.x = element_text(angle = 45, size=12, hjust = 1), 
             axis.text.y = element_text(size=10),
             axis.line = element_line(colour = "black", size = 0.5)
-            ) 
+      ) 
   } else {
-    amp_rabund(loaded_data_subset(),
-               tax.aggregate = "Genus",
-               tax.show = input$RA_tax.show,
-               tax.add = input$RA_tax.add,
-               plot.flip = input$RA_flip,
-               group = input$RA_group
+    amp_boxplot(loaded_data_subset(),
+               tax_aggregate = input$boxplot_tax_aggregate,
+               tax_show = input$boxplot_tax_show,
+               tax_add = input$boxplot_tax_add,
+               plot_flip = input$boxplot_flip,
+               group = input$boxplot_group
     ) + theme_light() +
-      theme(axis.text.x = element_text(angle = 0, size=12, hjust = 1), 
-            axis.text.y=element_text(size=10),
+      theme(axis.text.x = element_text(size=12), 
+            axis.text.y = element_text(size=10),
             axis.line = element_line(colour = "black", size = 0.5)
-            ) 
+      ) 
   }
 })
 
-output$RA <- renderPlot({
-  plot_RA()
+output$boxplot <- renderPlot({
+  plot_boxplot()
 })
 
-################## PCA ##################
-output$PCA_UI_group <- renderUI({
+################## Ordination ##################
+output$ord_UI_group <- renderUI({
   selectInput(
-    inputId = "PCA_group",
+    inputId = "ord_group",
     label = "Select group variable",
     choices = data_variables(),
     selected = data_variables_selected()
   )
 })
 
-output$PCA_UI_trajectory <- renderUI({
+output$ord_UI_constrain <- renderUI({
   selectInput(
-    inputId = "PCA_trajectory",
-    label = "Select trajectory variable",
+    inputId = "ord_constrain",
+    label = "Select constrain variable",
     choices = data_variables(),
     selected = data_variables_selected()
   )
 })
 
-plot_PCA <- eventReactive(input$renderplot_PCA, {
+plot_ord <- eventReactive(input$renderplot_ord, {
   #A group is a must
-  if(is.null(input$PCA_group)) return(NULL)
+  if(is.null(input$ord_group)) return(NULL)
   
-  #remove low abundances
-  PCA_data <- reactive ({
-    abund <- loaded_data_subset()[["abund"]]
-    newabund <- abund[!apply(abund, 1, function(row) all(row < input$PCA_filterlowabund)),]
-    tax <- loaded_data_subset()[["tax"]][rownames(newabund),]
-    metadata <- loaded_data_subset()[["metadata"]][colnames(newabund),]
-    list <- list(abund = newabund, tax = tax, metadata = metadata)
-    return(list)
-  })
-  
-  #arguments 
-  if(input$PCA_plot_nspecies != 0) {
-    plot_species <- TRUE
-    plot_nspecies <- input$PCA_plot_nspecies
-  } else if(input$PCA_plot_nspecies == 0) {
-    plot_species <- FALSE
-    plot_nspecies <- NULL
-  }
-  
-  if(input$PCA_constrain & !input$PCA_trajectory) {
-    plot <- amp_ordinate(PCA_data(),
-                         output = "complete", 
-                         constrain = input$PCA_group,
-                         envfit.significant = input$PCA_envfitslvl,
-                         envfit.factor = input$PCA_group,
-                         envfit.show = FALSE,
-                         
-                         plot.color = input$PCA_group, 
-                         plot.group = input$PCA_plot_group,
-                         plot.group.label = input$PCA_group,
-                         plot.species = plot_species,
-                         plot.nspecies = plot_nspecies
-                         #scale.species = TRUE
-    ) 
-  } else if(!input$PCA_constrain & input$PCA_trajectory) {
-    plot <- amp_ordinate(PCA_data(),
-                         output = "complete", 
-                         trajectory = input$PCA_trajectory,
-                         trajectory.group = input$PCA_group,
-                         
-                         plot.color = input$PCA_group, 
-                         #plot.group = input$PCA_plot_group,
-                         plot.group.label = input$PCA_group,
-                         plot.species = plot_species,
-                         plot.nspecies = plot_nspecies
-                         #scale.species = TRUE
-    ) 
-  } else if(input$PCA_constrain & input$PCA_trajectory) {
-    plot <- amp_ordinate(PCA_data(),
-                         output = "complete", 
-                         constrain = input$PCA_group,
-                         envfit.significant = input$PCA_envfitslvl,
-                         envfit.factor = input$PCA_group,
-                         
-                         trajectory = input$PCA_trajectory,
-                         trajectory.group = input$PCA_group,
-                         
-                         plot.color = input$PCA_group, 
-                         #plot.group = input$PCA_plot_group,
-                         plot.group.label = input$PCA_group,
-                         plot.species = plot_species,
-                         plot.nspecies = plot_nspecies
-                         #scale.species = TRUE
-    ) 
-  } else {
-    plot <- amp_ordinate(PCA_data(),
-                         output = "complete", 
-                         plot.color = input$PCA_group, 
-                         plot.group = input$PCA_plot_group,
-                         plot.group.label = input$PCA_group,
-                         plot.species = plot_species,
-                         plot.nspecies = plot_nspecies
-                         #scale.species = TRUE
-    ) 
-  }
-  output$PCA_stats <- renderPrint({plot$eff.model})
-  plot$plot + theme_minimal() +
-    theme(axis.line = element_line(colour = "black", size = 0.5)) 
+  amp_ordinate(loaded_data_subset(),
+               type = input$ord_type,
+               transform = input$ord_transform,
+               distmeasure = input$ord_distmeasure,
+               constrain = input$ord_constrain,
+               sample_color_by = input$ord_group,
+               sample_colorframe = TRUE,
+               sample_colorframe_label = input$ord_group,
+               species_nlabels = ifelse(any(input$ord_type == c("pcoa", "nmds", "ca", "cca", "dca")), 0, input$ord_nspecies)
+               )
 })
   
-output$PCA <- renderPlot({
-  plot_PCA()
+output$ord <- renderPlot({
+  plot_ord()
 })
 
 ################## Download feature ##################
@@ -223,10 +158,10 @@ output$saveplot <- downloadHandler(
   content = function(file) {
     if(input$plot_type == "Heatmap" & !is.null(plot_heatmap())) {
     ggsave(file, plot = plot_heatmap(), device = "png")
-    } else if (input$plot_type == "Principal Component Analysis (PCA)" & !is.null(plot_PCA())) {
-      ggsave(file, plot = plot_PCA(), device = "png")
-    } else if (input$plot_type == "Rank Abundance" & !is.null(plot_RA())) {
-      ggsave(file, plot = plot_RA(), device = "png")
+    } else if (input$plot_type == "Ordination" & !is.null(plot_ord())) {
+      ggsave(file, plot = plot_ord(), device = "png")
+    } else if (input$plot_type == "Boxplot" & !is.null(plot_boxplot())) {
+      ggsave(file, plot = plot_boxplot(), device = "png")
       } else return(NULL)
   }
 )
