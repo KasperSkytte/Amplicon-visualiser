@@ -424,8 +424,10 @@ amp_heatmap <- function (data, group_by = NULL, facet_by = NULL, normalise_by = 
                                                          ogroup]
         }
       }
-      p <- p + facet_grid(reformulate(facet_by), scales = "free_x", 
+      p <- p + facet_grid(reformulate(facet_by),
+                          scales = "free_x", 
                           space = "free")
+      p <- p + theme(strip.text = element_text(size = 12, face = "bold"))
     }
     return(p)
   }
@@ -440,475 +442,541 @@ amp_heatmap <- function (data, group_by = NULL, facet_by = NULL, normalise_by = 
 }
 
 ##### amp_ordinate #####
-amp_ordinate <- function (data, filter_species = 0.1, type = "PCA", distmeasure = "none", 
-                          transform = "hellinger", constrain = NULL, x_axis = 1, y_axis = 2, 
-                          sample_color_by = NULL, sample_color_order = NULL, sample_shape_by = NULL, 
-                          sample_colorframe = FALSE, sample_colorframe_label = NULL, 
-                          sample_label_by = NULL, sample_label_size = 4, sample_label_segment_color = "black", 
-                          sample_point_size = 2, sample_trajectory = NULL, sample_trajectory_group = sample_trajectory, 
-                          sample_plotly = NULL, species_plot = FALSE, species_nlabels = 0, 
-                          species_label_taxonomy = "Genus", species_label_size = 3, 
-                          species_label_color = "grey10", species_rescale = FALSE, 
-                          species_point_size = 2, species_shape = 20, species_plotly = FALSE, 
-                          envfit_factor = NULL, envfit_numeric = NULL, envfit_signif_level = 0.001, 
-                          envfit_textsize = 3, envfit_color = "darkred", envfit_numeric_arrows_scale = 1, 
-                          envfit_show = TRUE, repel_labels = TRUE, opacity = 0.8, 
-                          tax_empty = "best", detailed_output = FALSE, ...) {
-  if (species_plotly == T & !is.null(sample_plotly)) {
-    stop("You can not use plotly for both species and samples in the same plot.")
-  }
-  if (species_plotly == T | !is.null(sample_plotly)) {
-    warning("geom_text_repel is not supported by plotly yet, forcing repel_labels = FALSE.")
+amp_ordinate <- function(data,
+                         filter_species = 0.1, 
+                         type = "PCA",
+                         distmeasure = "none",
+                         transform = "hellinger",
+                         constrain = NULL,
+                         x_axis = 1,
+                         y_axis = 2, 
+                         sample_color_by = NULL,
+                         sample_color_order = NULL, 
+                         sample_shape_by = NULL,
+                         sample_colorframe = FALSE,
+                         sample_colorframe_label = NULL, 
+                         sample_label_by = NULL,
+                         sample_label_size = 4,
+                         sample_label_segment_color = "black",
+                         sample_point_size = 2,
+                         sample_trajectory = NULL,
+                         sample_trajectory_group = sample_trajectory,
+                         sample_plotly = FALSE,
+                         species_plot = FALSE, 
+                         species_nlabels = 0, 
+                         species_label_taxonomy = "Genus",
+                         species_label_size = 3, 
+                         species_label_color = "grey10", 
+                         species_rescale = FALSE, 
+                         species_point_size = 2,
+                         species_shape = 20, 
+                         species_plotly = FALSE,
+                         envfit_factor = NULL,
+                         envfit_numeric = NULL,
+                         envfit_signif_level = 0.001, 
+                         envfit_textsize = 3,
+                         envfit_color = "darkred", 
+                         envfit_numeric_arrows_scale = 1, 
+                         envfit_show = TRUE, 
+                         repel_labels = TRUE, 
+                         opacity = 0.8, 
+                         tax_empty = "best", 
+                         detailed_output = FALSE, 
+                         ...) {
+  if(species_plotly == T | sample_plotly == T){
     repel_labels <- F
   }
-  if (length(unique(data$metadata[, 1])) <= 2) 
+  
+  #Impossible to do ordination with 1 or 2 samples
+  if(length(unique(data$metadata[,1])) <= 2)
     stop("Ordination cannot be performed on 2 or fewer samples (the number of resulting axes will always be n-1, where n is the number of samples).")
+  
+  #Check the data
   data <- amp_rename(data = data, tax_empty = tax_empty)
-  abund_pct <- as.data.frame(sapply(data$abund, function(x) x/sum(x) * 
-                                      100))
-  rownames(abund_pct) <- rownames(data$abund)
-  abund_subset <- abund_pct[!apply(abund_pct, 1, function(row) all(row <= 
-                                                                     filter_species)), , drop = FALSE]
-  data$abund <- data$abund[which(rownames(data$abund) %in% 
-                                   rownames(abund_subset)), , drop = FALSE]
+  
+  #First transform to percentages
+  abund_pct <- as.data.frame(sapply(data$abund, function(x) x/sum(x) * 100))
+  rownames(abund_pct) <- rownames(data$abund) #keep rownames
+  
+  #Then filter low abundant OTU's where ALL samples have below the threshold set with filter_species in percent
+  abund_subset <- abund_pct[!apply(abund_pct, 1, function(row) all(row <= filter_species)),,drop = FALSE] #remove low abundant OTU's 
+  data$abund <- data$abund[which(rownames(data$abund) %in% rownames(abund_subset)),,drop = FALSE]
   rownames(data$tax) <- data$tax$OTU
-  data$tax <- data$tax[which(rownames(data$tax) %in% rownames(abund_subset)), 
-                       , drop = FALSE]
+  data$tax <- data$tax[which(rownames(data$tax) %in% rownames(abund_subset)),,drop = FALSE] #same with taxonomy
+  
+  #to fix user argument characters, so fx PCoA/PCOA/pcoa are all valid
   type <- tolower(type)
-  if (!transform == "none" & transform != "sqrt") {
+  
+  #data transformation with decostand()
+  if(!transform == "none" & transform != "sqrt") {
     transform <- tolower(transform)
     data$abund <- t(vegan::decostand(t(data$abund), method = transform))
-  }
-  else if (transform == "sqrt") {
+  } else if (transform == "sqrt") {
     data$abund <- t(sqrt(t(data$abund)))
-  }
+  } 
+  
+  #Generate inputmatrix AFTER transformation
   if (any(type == c("nmds", "mmds", "pcoa", "dca"))) {
     if (!distmeasure == "none") {
+      #Calculate distance matrix with vegdist()
       distmeasure <- tolower(distmeasure)
-      if (distmeasure == "jsd") {
-        dist.JSD <- function(inMatrix, pseudocount = 1e-06) {
-          KLD <- function(x, y) sum(x * log(x/y))
-          JSD <- function(x, y) sqrt(0.5 * KLD(x, (x + 
-                                                     y)/2) + 0.5 * KLD(y, (x + y)/2))
+      if(distmeasure == "jsd") {
+        #This is based on http://enterotype.embl.de/enterotypes.html
+        #Abundances of 0 will be set to the pseudocount value to avoid 0-value denominators
+        #Unfortunately this code is SLOOOOOOOOW
+        dist.JSD <- function(inMatrix, pseudocount=0.000001) {
+          KLD <- function(x,y) sum(x *log(x/y))
+          JSD <- function(x,y) sqrt(0.5 * KLD(x, (x+y)/2) + 0.5 * KLD(y, (x+y)/2))
           matrixColSize <- length(colnames(inMatrix))
           matrixRowSize <- length(rownames(inMatrix))
           colnames <- colnames(inMatrix)
-          resultsMatrix <- matrix(0, matrixColSize, 
-                                  matrixColSize)
-          inMatrix = apply(inMatrix, 1:2, function(x) ifelse(x == 
-                                                               0, pseudocount, x))
-          for (i in 1:matrixColSize) {
-            for (j in 1:matrixColSize) {
-              resultsMatrix[i, j] = JSD(as.vector(inMatrix[, 
-                                                           i]), as.vector(inMatrix[, j]))
+          resultsMatrix <- matrix(0, matrixColSize, matrixColSize)
+          
+          inMatrix = apply(inMatrix,1:2,function(x) ifelse (x==0,pseudocount,x))
+          
+          for(i in 1:matrixColSize) {
+            for(j in 1:matrixColSize) { 
+              resultsMatrix[i,j]=JSD(as.vector(inMatrix[,i]),
+                                     as.vector(inMatrix[,j]))
             }
           }
-          rownames(resultsMatrix) <- colnames(resultsMatrix) <- colnames
-          resultsMatrix <- as.dist(resultsMatrix)
+          colnames -> colnames(resultsMatrix) -> rownames(resultsMatrix)
+          as.dist(resultsMatrix)->resultsMatrix
           attr(resultsMatrix, "method") <- "dist"
-          return(resultsMatrix)
+          return(resultsMatrix) 
         }
         cat("Calculating the Jensen-Shannon Divergence (JSD) distance matrix may take a long time.")
         inputmatrix <- dist.JSD(data$abund)
+      } else if(any(distmeasure == c("manhattan", "euclidean", "canberra", "bray", "kulczynski", "jaccard", "gower", "altGower", "morisita", "horn", "mountford", "raup" , "binomial", "chao", "cao", "mahalanobis"))) {
+        inputmatrix <- vegan::vegdist(t(data$abund), method = distmeasure)
       }
-      else if (any(distmeasure == c("manhattan", "euclidean", 
-                                    "canberra", "bray", "kulczynski", "jaccard", 
-                                    "gower", "altGower", "morisita", "horn", "mountford", 
-                                    "raup", "binomial", "chao", "cao", "mahalanobis"))) {
-        inputmatrix <- vegan::vegdist(t(data$abund), 
-                                      method = distmeasure)
-      }
-    }
-    else if (distmeasure == "none") {
+    } else if (distmeasure == "none") {
       warning("No distance measure selected, using raw data. If this is not deliberate, please provide one with the argument: distmeasure.")
       inputmatrix <- t(data$abund)
     }
+    
     if (transform != "none" & distmeasure != "none") {
       warning("Using both transformation AND a distance measure is not recommended for distance-based ordination (nMDS/PCoA/DCA). If this is not deliberate, consider transform = \"none\".")
     }
-  }
-  else if (any(type == c("pca", "rda", "ca", "cca"))) {
+  } else if(any(type == c("pca", "rda", "ca", "cca"))) {
     inputmatrix <- t(data$abund)
   }
-  if (type == "pca") {
+  
+  #################################### end of block ####################################
+  
+  #Generate data depending on the chosen ordination type
+  if(type == "pca") {
+    #make the model
     model <- vegan::rda(inputmatrix, ...)
+    
+    #axis (and data column) names
     x_axis_name <- paste0("PC", x_axis)
     y_axis_name <- paste0("PC", y_axis)
-    totalvar <- round(model$CA$eig/model$tot.chi * 100, 
-                      1)
-    sitescores <- vegan::scores(model, display = "sites", 
-                                choices = c(x_axis, y_axis))
-    speciesscores <- vegan::scores(model, display = "species", 
-                                   choices = c(x_axis, y_axis))
-  }
-  else if (type == "rda") {
-    if (is.null(constrain)) 
+    
+    #Calculate the amount of inertia explained by each axis
+    totalvar <- round(model$CA$eig/model$tot.chi * 100, 1)
+    
+    #Calculate species- and site scores
+    sitescores <- vegan::scores(model, display = "sites", choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", choices = c(x_axis, y_axis))
+    
+  } else if(type == "rda") {
+    if(is.null(constrain)) 
       stop("Argument constrain must be provided when performing constrained/canonical analysis.")
-    codestring <- paste0("rda(inputmatrix~", paste(constrain, 
-                                                   collapse = "+"), ", data$metadata, ...)")
-    model <- eval(parse(text = codestring))
+    #make the model
+    codestring <- paste0("rda(inputmatrix~", paste(constrain, collapse = "+"), ", data$metadata, ...)") #function arguments written in the format "rda(x ~ y + z)" cannot be directly passed to rda(), now user just provides a vector
+    model <-  eval(parse(text = codestring))
+    
+    #axes depend on the results
     x_axis_name <- paste0("RDA", x_axis)
-    if (model$CCA$rank <= 1) {
+    if (model$CCA$rank <= 1){
       y_axis_name <- "PC1"
-      totalvar <- c(round(model$CCA$eig/model$tot.chi * 
-                            100, 1), round(model$CA$eig/model$tot.chi * 
-                                             100, 1))
-      constrainedvar <- c(round(model$CA$eig/model$CA$tot.chi * 
-                                  100, 1))
-    }
-    else if (model$CCA$rank > 1) {
+      
+      #Calculate the amount of inertia explained by each axis
+      totalvar <- c(round(model$CCA$eig/model$tot.chi * 100, 1), #constrained of total space
+                    round(model$CA$eig/model$tot.chi * 100, 1)  #UNconstrained of total space
+      )
+      constrainedvar <- c(round(model$CA$eig/model$CA$tot.chi * 100, 1)) #UNconstrained of total UNconstrained space
+    } else if (model$CCA$rank > 1) {
       y_axis_name <- paste0("RDA", y_axis)
-      totalvar <- c(round(model$CCA$eig/model$tot.chi * 
-                            100, 1), round(model$CA$eig/model$tot.chi * 
-                                             100, 1))
-      constrainedvar <- c(round(model$CCA$eig/model$CCA$tot.chi * 
-                                  100, 1))
+      
+      #Calculate the amount of inertia explained by each axis
+      totalvar <- c(round(model$CCA$eig/model$tot.chi * 100, 1), #constrained of total space
+                    round(model$CA$eig/model$tot.chi * 100, 1)  #UNconstrained of total space
+      )
+      constrainedvar <- c(round(model$CCA$eig/model$CCA$tot.chi * 100, 1)) #constrained of total constrained space
     }
-    sitescores <- vegan::scores(model, display = "sites", 
-                                choices = c(x_axis, y_axis))
-    speciesscores <- vegan::scores(model, display = "species", 
-                                   choices = c(x_axis, y_axis))
-  }
-  else if (type == "nmds") {
-    model <- vegan::metaMDS(inputmatrix, trace = FALSE, 
-                            ...)
+    
+    #Calculate species- and site scores
+    sitescores <- vegan::scores(model, display = "sites", choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", choices = c(x_axis, y_axis))
+  } else if(type == "nmds") {
+    #make the model
+    model <- vegan::metaMDS(inputmatrix, trace = FALSE, ...)
+    
+    #axis (and data column) names
     x_axis_name <- paste0("NMDS", x_axis)
     y_axis_name <- paste0("NMDS", y_axis)
+    
+    #Calculate species- and site scores
+    #Speciesscores may not be available with MDS
     sitescores <- vegan::scores(model, display = "sites")
-    if (!length(model$species) > 1) {
+    if(!length(model$species) > 1) {
       speciesscores <- warning("Speciesscores are not available.")
+    } else {
+      speciesscores <- vegan::scores(model, display = "species", choices = c(x_axis, y_axis))
     }
-    else {
-      speciesscores <- vegan::scores(model, display = "species", 
-                                     choices = c(x_axis, y_axis))
-    }
-  }
-  else if (type == "mmds" | type == "pcoa") {
+  } else if(type == "mmds" | type == "pcoa") {
+    #make the model
     model <- ape::pcoa(inputmatrix, ...)
+    
+    #axis (and data column) names
     x_axis_name <- paste0("PCo", x_axis)
     y_axis_name <- paste0("PCo", y_axis)
+    
+    #Calculate the percentage of eigenvalues explained by the axes
     totalvar <- round(model$values$Relative_eig * 100, 1)
     names(totalvar) <- c(paste0("PCo", seq(1:length(totalvar))))
+    
+    #Calculate species- and site scores
+    #Speciesscores are not available with pcoa
     sitescores <- as.data.frame(model$vectors)
     colnames(sitescores) <- c(paste0("PCo", seq(1:length(sitescores))))
     speciesscores <- warning("Speciesscores are not available.")
-  }
-  else if (type == "ca") {
+  } else if(type == "ca") {
+    #make the model
     model <- vegan::cca(inputmatrix, ...)
+    
+    #axis (and data column) names
     x_axis_name <- paste0("CA", x_axis)
     y_axis_name <- paste0("CA", y_axis)
-    totalvar <- round(model$CA$eig/model$tot.chi * 100, 
-                      1)
-    sitescores <- vegan::scores(model, display = "sites", 
-                                choices = c(x_axis, y_axis))
-    speciesscores <- vegan::scores(model, display = "species", 
-                                   choices = c(x_axis, y_axis))
-  }
-  else if (type == "cca") {
-    if (is.null(constrain)) 
+    
+    #Calculate the percentage of eigenvalues explained by the axes
+    totalvar <- round(model$CA$eig/model$tot.chi * 100, 1)
+    
+    #Calculate species- and site scores
+    sitescores <- vegan::scores(model, display = "sites", choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", choices = c(x_axis, y_axis))
+  } else if(type == "cca") {
+    if(is.null(constrain)) 
       stop("Argument constrain must be provided when performing constrained/canonical analysis.")
-    codestring <- paste0("cca(inputmatrix~", paste(constrain, 
-                                                   collapse = "+"), ", data$metadata, ...)")
-    model <- eval(parse(text = codestring))
+    #make the model
+    codestring <- paste0("cca(inputmatrix~", paste(constrain, collapse = "+"), ", data$metadata, ...)") #function arguments written in the format "rda(x ~ y + z)" cannot be directly passed to rda(), now user just provides a vector
+    model <-  eval(parse(text = codestring))
+    
+    #axes depend on the results
     x_axis_name <- paste0("CCA", x_axis)
-    if (model$CCA$rank <= 1) {
+    if (model$CCA$rank <= 1){
       y_axis_name <- "CA1"
-      totalvar <- c(round(model$CCA$eig/model$tot.chi * 
-                            100, 1), round(model$CA$eig/model$tot.chi * 
-                                             100, 1))
-      constrainedvar <- c(round(model$CA$eig/model$CA$tot.chi * 
-                                  100, 1))
-    }
-    else if (model$CCA$rank > 1) {
+      
+      #Calculate the amount of inertia explained by each axis
+      totalvar <- c(round(model$CCA$eig/model$tot.chi * 100, 1), #constrained of total space
+                    round(model$CA$eig/model$tot.chi * 100, 1)  #UNconstrained of total space
+      )
+      constrainedvar <- c(round(model$CA$eig/model$CA$tot.chi * 100, 1)) #UNconstrained of total UNconstrained space
+    } else if (model$CCA$rank > 1) {
       y_axis_name <- paste0("CCA", y_axis)
-      totalvar <- c(round(model$CCA$eig/model$tot.chi * 
-                            100, 1), round(model$CA$eig/model$tot.chi * 
-                                             100, 1))
-      constrainedvar <- c(round(model$CCA$eig/model$CCA$tot.chi * 
-                                  100, 1))
+      
+      #Calculate the amount of inertia explained by each axis
+      totalvar <- c(round(model$CCA$eig/model$tot.chi * 100, 1), #constrained of total space
+                    round(model$CA$eig/model$tot.chi * 100, 1)  #UNconstrained of total space
+      )
+      constrainedvar <- c(round(model$CCA$eig/model$CCA$tot.chi * 100, 1)) #constrained of total constrained space
     }
-    sitescores <- vegan::scores(model, display = "sites", 
-                                choices = c(x_axis, y_axis))
-    speciesscores <- vegan::scores(model, display = "species", 
-                                   choices = c(x_axis, y_axis))
-  }
-  else if (type == "dca") {
+    
+    #Calculate species- and site scores
+    sitescores <- vegan::scores(model, display = "sites", choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", choices = c(x_axis, y_axis))
+  } else if(type == "dca") {
+    #make the model
     model <- vegan::decorana(inputmatrix, ...)
+    
+    #axis (and data column) names
     x_axis_name <- paste0("DCA", x_axis)
     y_axis_name <- paste0("DCA", y_axis)
-    sitescores <- vegan::scores(model, display = "sites", 
-                                choices = c(x_axis, y_axis))
-    speciesscores <- vegan::scores(model, display = "species", 
-                                   choices = c(x_axis, y_axis))
+    
+    #Calculate the percentage of eigenvalues explained by the axes
+    #totalvar <- round(model$CA$eig/model$CA$tot.chi * 100, 1)
+    
+    #Calculate species- and site scores
+    sitescores <- vegan::scores(model, display = "sites", choices = c(x_axis, y_axis))
+    speciesscores <- vegan::scores(model, display = "species", choices = c(x_axis, y_axis))
   }
+  #################################### end of block ####################################
+  
+  #Make data frames for ggplot
   dsites <- cbind.data.frame(data$metadata, sitescores)
+  
   if (!is.null(sample_color_order)) {
-    dsites[, sample_color_by] <- factor(dsites[, sample_color_by], 
-                                        levels = sample_color_order)
+    dsites[, sample_color_by] <- factor(dsites[, sample_color_by], levels = sample_color_order)
   }
-  if (length(speciesscores) > 1) {
-    dspecies <- merge(data.frame(speciesscores, OTU = rownames(speciesscores)), 
-                      data$tax, by.x = "OTU")
-    dspecies$dist <- dspecies[, x_axis_name]^2 + dspecies[, 
-                                                          y_axis_name]^2
+  
+  if(length(speciesscores) > 1) {
+    dspecies <- merge(data.frame(speciesscores, OTU = rownames(speciesscores)), data$tax, by.x = "OTU")
+    dspecies$dist <- dspecies[, x_axis_name]^2 + dspecies[, y_axis_name]^2
     dspecies <- dplyr::arrange(dspecies, desc(dist))
     rownames(dspecies) <- dspecies$OTU
     if (species_rescale == TRUE) {
-      maxx <- max(abs(dsites[, x_axis_name]))/max(abs(dspecies[, 
-                                                               x_axis_name]))
-      dspecies[, x_axis_name] <- dspecies[, x_axis_name] * 
-        maxx * 0.8
-      maxy <- max(abs(dsites[, y_axis_name]))/max(abs(dspecies[, 
-                                                               y_axis_name]))
-      dspecies[, y_axis_name] <- dspecies[, y_axis_name] * 
-        maxy * 0.8
+      maxx <- max(abs(dsites[, x_axis_name]))/max(abs(dspecies[,x_axis_name]))
+      dspecies[, x_axis_name] <- dspecies[, x_axis_name] * maxx * 0.8
+      maxy <- max(abs(dsites[, y_axis_name]))/max(abs(dspecies[,y_axis_name]))
+      dspecies[, y_axis_name] <- dspecies[, y_axis_name] * maxy * 0.8
     }
-  }
-  else {
+  } else {
     dspecies = NULL
   }
-  plot <- ggplot(dsites, aes_string(x = x_axis_name, y = y_axis_name, 
-                                    color = sample_color_by, shape = sample_shape_by))
-  if (sample_colorframe == TRUE) {
-    if (is.null(sample_color_by)) 
-      stop("Please provide the argument sample_color_by.")
+  
+  #Generate a nice ggplot with the coordinates from scores
+  plot <- ggplot(dsites,
+                 aes_string(x = x_axis_name,
+                            y = y_axis_name,
+                            color = sample_color_by,
+                            shape = sample_shape_by))
+  
+  #Generate a color frame around the chosen color group
+  
+  if(sample_colorframe == TRUE) {
+    if(is.null(sample_color_by)) stop("Please provide the argument sample_color_by.")
     splitData <- split(dsites, dsites[, sample_color_by]) %>% 
       lapply(function(df) {
-        df[chull(df[, x_axis_name], df[, y_axis_name]), 
-           ]
+        df[chull(df[, x_axis_name], df[, y_axis_name]), ]
       })
     hulls <- do.call(rbind, splitData)
-    plot <- plot + geom_polygon(data = hulls, aes_string(fill = sample_color_by, 
-                                                         group = sample_color_by), alpha = 0.2 * opacity)
+    plot <- plot + geom_polygon(data = hulls, aes_string(fill = sample_color_by, group = sample_color_by), alpha = 0.2*opacity)
   }
-  if (!is.null(sample_plotly)) {
-    if (length(sample_plotly) > 1) {
-      data_plotly <- apply(data$metadata[, sample_plotly], 
-                           1, paste, collapse = "<br>")
+  
+  # Add points and plotly functionality for samples
+  if (!sample_plotly == FALSE){
+    if(length(sample_plotly) > 1){
+      data_plotly <- apply(data$metadata[,sample_plotly], 1, paste, collapse = "<br>")  
+    } else if(sample_plotly == "all" | sample_plotly == TRUE){
+      data_plotly <- apply(data$metadata[,], 1, paste, collapse = "<br>")  
+    } else{
+      data_plotly <- paste0(sample_plotly,": ",data$metadata[,sample_plotly])
     }
-    else if (sample_plotly == "all" | sample_plotly == TRUE) {
-      data_plotly <- apply(data$metadata[, ], 1, paste, 
-                           collapse = "<br>")
+    plot <- plot +
+      suppressWarnings(geom_point(size = 2, alpha = opacity,
+                                  aes(text = data_plotly))) + #HER
+      theme_minimal() +
+      theme(axis.line = element_line(colour = "black", size = 0.5))
+  } else{
+    plot <- plot +
+      geom_point(size = sample_point_size, alpha = opacity) +
+      theme_minimal() +
+      theme(axis.line = element_line(colour = "black", size = 0.5))
+  }
+  
+  #Only eigenvalue-based ordination methods can be displayed with % on axes
+  if(type == "pca" | type == "ca" | type == "pcoa" | type == "mmds") {
+    plot <- plot +
+      xlab(paste(x_axis_name, " [", totalvar[x_axis_name], "%]", sep = "")) + 
+      ylab(paste(y_axis_name, " [", totalvar[y_axis_name], "%]", sep = ""))
+  } else if(type == "rda" | type == "cca") {
+    if(model$CCA$rank > 1) {
+      plot <- plot + 
+        xlab(paste(x_axis_name, " [", totalvar[x_axis_name], "% / ", constrainedvar[x_axis_name], "%]", sep = "")) +
+        ylab(paste(y_axis_name, " [", totalvar[y_axis_name], "% / ", constrainedvar[y_axis_name], "%]", sep = ""))
+    } else if(model$CCA$rank <= 1) {
+      plot <- plot + 
+        xlab(paste(x_axis_name, " [", totalvar[x_axis_name], "%]", sep = "")) +
+        ylab(paste(y_axis_name, " [", totalvar[y_axis_name], "% / ", constrainedvar[y_axis_name], "%]", sep = ""))
     }
-    else {
-      data_plotly <- paste0(sample_plotly, ": ", data$metadata[, 
-                                                               sample_plotly])
-    }
-    plot <- plot + suppressWarnings(geom_point(size = 2, 
-                                               alpha = opacity, aes(text = data_plotly))) + theme_minimal() + 
-      theme(axis.line = element_line(colour = "black", 
-                                     size = 0.5))
+  } else if (type == "nmds") {
+    plot <- plot +
+      annotate("text", size = 3, x = Inf, y = Inf, hjust = 1, vjust = 1, label = paste0("Stress value = ", round(model$stress, 3)))
   }
-  else {
-    plot <- plot + geom_point(size = sample_point_size, 
-                              alpha = opacity) + theme_minimal() + theme(axis.line = element_line(colour = "black", 
-                                                                                                  size = 0.5))
-  }
-  if (type == "pca" | type == "ca" | type == "pcoa" | type == 
-      "mmds") {
-    plot <- plot + xlab(paste(x_axis_name, " [", totalvar[x_axis_name], 
-                              "%]", sep = "")) + ylab(paste(y_axis_name, " [", 
-                                                            totalvar[y_axis_name], "%]", sep = ""))
-  }
-  else if (type == "rda" | type == "cca") {
-    if (model$CCA$rank > 1) {
-      plot <- plot + xlab(paste(x_axis_name, " [", totalvar[x_axis_name], 
-                                "% / ", constrainedvar[x_axis_name], "%]", sep = "")) + 
-        ylab(paste(y_axis_name, " [", totalvar[y_axis_name], 
-                   "% / ", constrainedvar[y_axis_name], "%]", 
-                   sep = ""))
-    }
-    else if (model$CCA$rank <= 1) {
-      plot <- plot + xlab(paste(x_axis_name, " [", totalvar[x_axis_name], 
-                                "%]", sep = "")) + ylab(paste(y_axis_name, " [", 
-                                                              totalvar[y_axis_name], "% / ", constrainedvar[y_axis_name], 
-                                                              "%]", sep = ""))
-    }
-  }
-  else if (type == "nmds") {
-    plot <- plot + annotate("text", size = 3, x = Inf, y = Inf, 
-                            hjust = 1, vjust = 1, label = paste0("Stress value = ", 
-                                                                 round(model$stress, 3)))
-  }
+  
+  #Plot species points
   if (species_plot == TRUE) {
-    if (species_plotly == T) {
-      data_plotly <- paste("Kingdom: ", data$tax[, 1], 
-                           "<br>", "Phylum: ", data$tax[, 2], "<br>", "Class: ", 
-                           data$tax[, 3], "<br>", "Order: ", data$tax[, 
-                                                                      4], "<br>", "Family: ", data$tax[, 5], "<br>", 
-                           "Genus: ", data$tax[, 6], "<br>", "Species: ", 
-                           data$tax[, 7], "<br>", "OTU: ", data$tax[, 8], 
-                           sep = "")
-      plot <- plot + geom_point(data = dspecies, color = "darkgrey", 
-                                shape = species_shape, size = species_point_size - 
-                                  1, alpha = opacity, aes(text = data_plotly))
+    if(species_plotly == T){
+      data_plotly <- paste("Kingdom: ", data$tax[,1],"<br>",
+                           "Phylum: ", data$tax[,2],"<br>",
+                           "Class: ", data$tax[,3],"<br>",
+                           "Order: ", data$tax[,4],"<br>",
+                           "Family: ", data$tax[,5],"<br>",
+                           "Genus: ", data$tax[,6],"<br>",
+                           "Species: ", data$tax[,7],"<br>",
+                           "OTU: ", data$tax[,8],sep = "")
+      plot <- plot + 
+        geom_point(data = dspecies,
+                   color = "darkgrey",
+                   shape = species_shape,
+                   size = species_point_size-1,
+                   alpha = opacity,
+                   aes(text = data_plotly))
+    } else{
+      plot <- plot + 
+        geom_point(data = dspecies,
+                   color = "darkgrey",
+                   shape = species_shape,
+                   size = species_point_size,
+                   alpha = opacity) 
     }
-    else {
-      plot <- plot + geom_point(data = dspecies, color = "darkgrey", 
-                                shape = species_shape, size = species_point_size, 
-                                alpha = opacity)
-    }
+    
   }
+  
+  #Plot text labels
   if (!is.null(sample_colorframe_label)) {
     temp <- data.frame(group = dsites[, sample_colorframe_label], 
-                       x = dsites[, x_axis_name], y = dsites[, y_axis_name]) %>% 
-      group_by(group) %>% summarise(cx = mean(x), cy = mean(y)) %>% 
+                       x = dsites[, x_axis_name],
+                       y = dsites[, y_axis_name]) %>% 
+      group_by(group) %>%
+      summarise(cx = mean(x), cy = mean(y)) %>% 
       as.data.frame()
-    temp2 <- merge(dsites, temp, by.x = sample_colorframe_label, 
+    temp2 <- merge(dsites, temp,
+                   by.x = sample_colorframe_label, 
                    by.y = "group")
-    temp3 <- temp2[!duplicated(temp2[, sample_colorframe_label]), 
-                   ]
-    if (repel_labels == T) {
-      plot <- plot + ggrepel::geom_text_repel(data = temp3, 
-                                              aes_string(x = "cx", y = "cy", label = sample_colorframe_label), 
-                                              size = 3, color = "black", fontface = 2)
-    }
-    else {
-      plot <- plot + geom_text(data = temp3, aes_string(x = "cx", 
-                                                        y = "cy", label = sample_colorframe_label), 
-                               size = 3, color = "black", fontface = 2)
-    }
+    temp3 <- temp2[!duplicated(temp2[, sample_colorframe_label]), ]
+    if (repel_labels == T){plot <- plot + ggrepel::geom_text_repel(data = temp3, aes_string(x = "cx", y = "cy", label = sample_colorframe_label), size = 3,color = "black",fontface = 2)}
+    else{plot <- plot +geom_text(data = temp3, aes_string(x = "cx", y = "cy", label = sample_colorframe_label), size = 3,color = "black",fontface = 2)}
   }
+  
+  #sample_trajectory
   if (!is.null(sample_trajectory)) {
     traj <- dsites[order(dsites[, sample_trajectory]), ]
     plot <- plot + geom_path(data = traj, aes_string(group = sample_trajectory_group))
   }
-  if (!is.null(sample_label_by)) {
-    if (repel_labels == T) {
-      plot <- plot + ggrepel::geom_text_repel(aes_string(label = sample_label_by), 
-                                              size = sample_label_size, color = "grey40", 
-                                              segment.color = sample_label_segment_color)
-    }
-    else {
-      plot <- plot + geom_text(aes_string(label = sample_label_by), 
-                               size = sample_label_size, color = "grey40", 
-                               segment.color = sample_label_segment_color)
-    }
+  
+  #Sample point labels
+  if(!is.null(sample_label_by)) {
+    
+    if (repel_labels == T){plot <- plot + ggrepel::geom_text_repel(aes_string(label = sample_label_by),size = sample_label_size, color = "grey40", segment.color = sample_label_segment_color)}
+    else{plot <- plot + geom_text(aes_string(label = sample_label_by),size = sample_label_size, color = "grey40", segment.color = sample_label_segment_color)}
   }
+  
+  #Plot species labels
   if (species_nlabels > 0) {
-    if (repel_labels == T) {
-      plot <- plot + ggrepel::geom_text_repel(data = dspecies[1:species_nlabels, 
-                                                              ], aes_string(x = x_axis_name, y = y_axis_name, 
-                                                                            label = species_label_taxonomy), colour = species_label_color, 
-                                              size = species_label_size, fontface = 4, inherit.aes = FALSE)
-    }
-    else {
-      plot <- plot + geom_text(data = dspecies[1:species_nlabels, 
-                                               ], aes_string(x = x_axis_name, y = y_axis_name, 
-                                                             label = species_label_taxonomy), colour = species_label_color, 
-                               size = species_label_size, fontface = 4, inherit.aes = FALSE)
-    }
+    if (repel_labels == T){plot <- plot + ggrepel::geom_text_repel(data = dspecies[1:species_nlabels,], aes_string(x = x_axis_name, y = y_axis_name, label = species_label_taxonomy),colour = species_label_color, size = species_label_size,fontface = 4,inherit.aes = FALSE)}
+    else{plot <- plot +geom_text(data = dspecies[1:species_nlabels,], aes_string(x = x_axis_name, y = y_axis_name, label = species_label_taxonomy),colour = species_label_color, size = species_label_size,fontface = 4,inherit.aes = FALSE)}
   }
-  if (!is.null(envfit_factor)) {
-    evf_factor_model <- envfit(model, data$metadata[, envfit_factor, 
-                                                    drop = FALSE], permutations = 999, choices = c(x_axis_name, 
-                                                                                                   y_axis_name))
-    evf_factor_data <- data.frame(Name = rownames(evf_factor_model$factors$centroids), 
-                                  Variable = evf_factor_model$factors$var.id, evf_factor_model$factors$centroids, 
-                                  pval = evf_factor_model$factors$pvals) %>% subset(pval <= 
-                                                                                      envfit_signif_level)
+  
+  ######## Fit environmental variables ########
+  # Categorical fitting
+  if(!is.null(envfit_factor)) {
+    evf_factor_model <- envfit(model,
+                               data$metadata[,envfit_factor, drop = FALSE],
+                               permutations = 999,
+                               choices = c(x_axis_name, y_axis_name)
+    )
+    evf_factor_data <- data.frame(Name = rownames(evf_factor_model$factors$centroids),
+                                  Variable = evf_factor_model$factors$var.id,
+                                  evf_factor_model$factors$centroids,
+                                  pval = evf_factor_model$factors$pvals
+    ) %>% subset(pval <= envfit_signif_level)
     if (nrow(evf_factor_data) > 0 & envfit_show == TRUE) {
-      if (repel_labels == T) {
-        plot <- plot + ggrepel::geom_text_repel(data = evf_factor_data, 
-                                                aes_string(x = x_axis_name, y = y_axis_name, 
-                                                           label = "Name"), colour = envfit_color, 
-                                                inherit.aes = FALSE, size = envfit_textsize, 
-                                                fontface = "bold")
-      }
-      else {
-        plot <- plot + geom_text(data = evf_factor_data, 
-                                 aes_string(x = x_axis_name, y = y_axis_name, 
-                                            label = "Name"), colour = envfit_color, 
-                                 inherit.aes = FALSE, size = envfit_textsize, 
-                                 fontface = "bold")
-      }
+      if (repel_labels == T){plot <- plot + ggrepel::geom_text_repel(data = evf_factor_data,aes_string(x = x_axis_name, y = y_axis_name, label = "Name"), colour = envfit_color, inherit.aes = FALSE, size = envfit_textsize, fontface = "bold")}
+      else{plot <- plot + geom_text(data = evf_factor_data,aes_string(x = x_axis_name, y = y_axis_name, label = "Name"), colour = envfit_color, inherit.aes = FALSE, size = envfit_textsize, fontface = "bold")}
     }
     if (nrow(evf_factor_data) == 0) {
       warning("No environmental variables fit below the chosen significant level.")
     }
-  }
-  else {
+  } else {
     evf_factor_model <- NULL
   }
+  
+  # Numerical fitting
   if (!is.null(envfit_numeric)) {
-    evf_numeric_model <- envfit(model, data$metadata[, envfit_numeric, 
-                                                     drop = FALSE], permutations = 999, choices = c(x_axis_name, 
-                                                                                                    y_axis_name))
-    evf_numeric_data <- data.frame(Name = rownames(evf_numeric_model$vectors$arrows), 
-                                   evf_numeric_model$vectors$arrows * sqrt(evf_numeric_model$vectors$r) * 
-                                     envfit_numeric_arrows_scale, pval = evf_numeric_model$vectors$pvals) %>% 
-      subset(pval <= envfit_signif_level)
+    evf_numeric_model <- envfit(model,
+                                data$metadata[,envfit_numeric, drop = FALSE],
+                                permutations = 999,
+                                choices = c(x_axis_name, y_axis_name)
+    )
+    evf_numeric_data <- data.frame(Name = rownames(evf_numeric_model$vectors$arrows),
+                                   evf_numeric_model$vectors$arrows * sqrt(evf_numeric_model$vectors$r) * envfit_numeric_arrows_scale,
+                                   pval = evf_numeric_model$vectors$pvals
+    ) %>% subset(pval <= envfit_signif_level)
     if (nrow(evf_numeric_data) > 0 & envfit_show == TRUE) {
-      plot <- plot + geom_segment(data = evf_numeric_data, 
-                                  aes_string(x = 0, xend = x_axis_name, y = 0, 
-                                             yend = y_axis_name), arrow = arrow(length = unit(3, 
-                                                                                              "mm")), colour = "darkred", size = 1, inherit.aes = FALSE) + 
-        geom_text(data = evf_numeric_data, aes_string(x = x_axis_name, 
-                                                      y = y_axis_name, label = "Name"), colour = envfit_color, 
-                  inherit.aes = FALSE, size = envfit_textsize, 
-                  hjust = 1.2, vjust = 1.2, fontface = "bold")
-    }
+      plot <- plot + geom_segment(data = evf_numeric_data,
+                                  aes_string(x = 0,
+                                             xend = x_axis_name,
+                                             y = 0,
+                                             yend = y_axis_name
+                                  ),
+                                  arrow = arrow(length = unit(3, "mm")),
+                                  colour = "darkred",
+                                  size = 1,
+                                  inherit.aes = FALSE) + 
+        geom_text(data = evf_numeric_data,
+                  aes_string(x = x_axis_name,
+                             y = y_axis_name,
+                             label = "Name"),
+                  colour = envfit_color,
+                  inherit.aes = FALSE,
+                  size = envfit_textsize,
+                  hjust = 1.2,
+                  vjust = 1.2,
+                  fontface = "bold"
+        )
+    } 
     if (nrow(evf_numeric_data) == 0) {
       warning("No environmental variables fit below the chosen significant level.")
     }
-  }
-  else {
+  } else {
     evf_numeric_model <- NULL
   }
-  if (!is.null(sample_plotly)) {
-    plotly::ggplotly(plot, tooltip = "text") %>% layout(showlegend = FALSE)
+  
+  #################################### end of block ####################################
+  
+  #return plot or additional details
+  if(!sample_plotly == FALSE){
+    plotly::ggplotly(plot, tooltip = "text") %>% 
+      layout(showlegend = FALSE)
+  } 
+  else if(species_plotly == T){
+    plotly::ggplotly(plot, tooltip = "text") %>% 
+      layout(showlegend = FALSE)
   }
-  else if (species_plotly == T) {
-    plotly::ggplotly(plot, tooltip = "text") %>% layout(showlegend = FALSE)
-  }
-  else if (!detailed_output) {
+  else if(!detailed_output){
     return(plot)
   }
-  else if (detailed_output) {
+  else if(detailed_output){
     if (type == "nmds") {
       screeplot <- NULL
-    }
-    else {
+    } else {
+      ### screeplot ###
+      #the data for it
       if (type == "mmds" | type == "pcoa") {
         if (length(model$values$Relative_eig) > 10) {
-          unconstrained_eig <- model$values$Relative_eig[1:10] * 
-            100
+          unconstrained_eig <- model$values$Relative_eig[1:10]*100
+        } else {
+          unconstrained_eig <- model$values$Relative_eig*100
         }
-        else {
-          unconstrained_eig <- model$values$Relative_eig * 
-            100
-        }
-        screeplot <- ggplot(data.frame(axis = factor(as.character(c(1:length(unconstrained_eig))), 
-                                                     levels = c(1:length(unconstrained_eig))), 
-                                       eigenvalues = unconstrained_eig), aes(x = axis, 
-                                                                             y = eigenvalues)) + geom_col() + theme_minimal() + 
-          xlab("Axis (max. 10 axes will be shown)") + 
+        #the scree plot
+        screeplot <- ggplot(data.frame(axis = factor(as.character(c(1:length(unconstrained_eig))), levels = c(1:length(unconstrained_eig))), eigenvalues = unconstrained_eig), aes(x = axis, y = eigenvalues)) +
+          geom_col() +
+          #geom_text(label = round(eigenvalues, 2), vjust = -1, size = 3)  + #Can't get it to work
+          theme_minimal() +
+          xlab("Axis (max. 10 axes will be shown)") +
           ylab("Eigenvalue in percent of total inertia")
-      }
-      else {
-        unconstrained_eig <- model$CA$eig/model$tot.chi * 
-          100
-        constrained_eig <- model$CCA$eig/model$tot.chi * 
-          100
+      } else {
+        unconstrained_eig <- model$CA$eig/model$tot.chi*100
+        constrained_eig <- model$CCA$eig/model$tot.chi*100
         if (length(constrained_eig) > 10) {
           constrained_eig <- constrained_eig[1:10]
         }
         if (length(unconstrained_eig) > 10) {
           unconstrained_eig <- unconstrained_eig[1:10]
         }
-        eigenvalues <- c(constrained_eig, unconstrained_eig)
-        screeplot <- ggplot(data.frame(axis = factor(names(eigenvalues), 
-                                                     levels = names(eigenvalues)), eigenvalues = eigenvalues), 
-                            aes(x = axis, y = eigenvalues)) + geom_col() + 
-          geom_text(label = round(eigenvalues, 2), vjust = -1, 
-                    size = 3) + theme_minimal() + theme(axis.text.x = element_text(angle = 90, 
-                                                                                   hjust = 1)) + xlab("Axis (max. 10 axes will be shown)") + 
+        eigenvalues <- c(constrained_eig, unconstrained_eig) #constrained combined with unconstrained
+        #the scree plot
+        screeplot <- ggplot(data.frame(axis = factor(names(eigenvalues), levels = names(eigenvalues)), eigenvalues = eigenvalues), aes(x = axis, y = eigenvalues)) +
+          geom_col() +
+          geom_text(label = round(eigenvalues, 2), vjust = -1, size = 3)  +
+          theme_minimal() +
+          theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+          xlab("Axis (max. 10 axes will be shown)") +
           ylab("Eigenvalue in percent of total inertia")
       }
     }
-    return(list(plot = plot, screeplot = screeplot, model = model, 
-                dsites = dsites, dspecies = dspecies, evf_factor_model = evf_factor_model, 
-                evf_numeric_model = evf_numeric_model))
+    
+    return(list(plot = plot,
+                screeplot = screeplot,
+                model = model,
+                dsites = dsites,
+                dspecies = dspecies,
+                evf_factor_model = evf_factor_model,
+                evf_numeric_model = evf_numeric_model)
+    )
   }
 }
 

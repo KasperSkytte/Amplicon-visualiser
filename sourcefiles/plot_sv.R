@@ -11,13 +11,24 @@ data_variables_selected <- reactive({
 })
 
 ################## Heatmap ##################
-output$heatmap_UI_tax_group <- renderUI({
+output$heatmap_UI_group_by <- renderUI({
   selectizeInput(
-    inputId = "heatmap_tax_group",
-    label = "Choose grouping",
+    inputId = "heatmap_group_by",
+    label = "Group by",
     choices = data_variables(),
     selected = data_variables_selected(),
     multiple = TRUE
+    #,options = list(maxItems = 2)
+  )
+})
+
+output$heatmap_UI_facet_by <- renderUI({
+  selectizeInput(
+    inputId = "heatmap_facet_by",
+    label = "Facet by",
+    choices = c("none", data_variables()),
+    selected = "none",
+    multiple = FALSE
     #,options = list(maxItems = 2)
   )
 })
@@ -36,15 +47,17 @@ output$heatmap_UI_tax_add <- renderUI({
 
 plot_heatmap <- eventReactive(input$renderplot_heatmap, {
   #A group is a must
-  if(is.null(input$heatmap_tax_group)) return(NULL)
-  order_x <- if(input$heatmap_cluster_x) {"cluster"}
-  order_y <- if(input$heatmap_cluster_y) {"cluster"}
+  if(is.null(input$heatmap_group_by)) return(NULL)
+  order_x <- if(any(input$heatmap_cluster == "Cluster x-axis")) {"cluster"}
+  order_y <- if(any(input$heatmap_cluster == "Cluster y-axis")) {"cluster"}
+  facet_by <- if(!input$heatmap_facet_by == "none") {input$heatmap_facet_by}
   amp_heatmap(data = loaded_data_subset(),
-              group_by = input$heatmap_tax_group, 
+              group_by = input$heatmap_group_by, 
+              facet_by = facet_by,
               tax_add = input$heatmap_tax_add,
               tax_aggregate = input$heatmap_tax_aggregate,
-              order_x = order_x, 
-              order_y = order_y,
+              order_x_by = order_x, 
+              order_y_by = order_y,
               tax_show = input$heatmap_tax_show,
               plot_values = input$heatmap_plot_values,
               plot_colorscale = "log10",
@@ -57,12 +70,11 @@ output$heatmap <- renderPlot({
 })
 
 ################## Boxplot ##################
-output$boxplot_UI_group <- renderUI({
+output$boxplot_UI_group_by <- renderUI({
   selectInput(
-    inputId = "boxplot_group",
-    label = "Select group variable",
-    choices = data_variables(),
-    selected = data_variables_selected()
+    inputId = "boxplot_group_by",
+    label = "Group by",
+    choices = data_variables()
   )
 })
 
@@ -79,34 +91,36 @@ output$boxplot_UI_tax_add <- renderUI({
 })
 
 plot_boxplot <- eventReactive(input$renderplot_boxplot ,{
-  #A group is a must
-  if(is.null(input$boxplot_group)) return(NULL)
-  
   if(input$boxplot_flip) {
-    amp_boxplot(loaded_data_subset(),
+    plot <- amp_boxplot(loaded_data_subset(),
                tax_aggregate = input$boxplot_tax_aggregate,
                tax_show = input$boxplot_tax_show,
                tax_add = input$boxplot_tax_add,
                plot_flip = input$boxplot_flip,
-               group = input$boxplot_group
-    ) + theme_light() +
+               group_by = input$boxplot_group_by
+               )
+    plot <- plot + 
+      theme_light() +
       theme(axis.text.x = element_text(angle = 45, size=12, hjust = 1), 
             axis.text.y = element_text(size=10),
             axis.line = element_line(colour = "black", size = 0.5)
-      ) 
+            ) 
   } else {
-    amp_boxplot(loaded_data_subset(),
+    plot <- amp_boxplot(loaded_data_subset(),
                tax_aggregate = input$boxplot_tax_aggregate,
                tax_show = input$boxplot_tax_show,
                tax_add = input$boxplot_tax_add,
                plot_flip = input$boxplot_flip,
-               group = input$boxplot_group
-    ) + theme_light() +
+               group_by = input$boxplot_group_by
+               )
+    plot <- plot +
+      theme_light() +
       theme(axis.text.x = element_text(size=12), 
             axis.text.y = element_text(size=10),
             axis.line = element_line(colour = "black", size = 0.5)
-      ) 
+            ) 
   }
+  return(plot)
 })
 
 output$boxplot <- renderPlot({
@@ -136,7 +150,7 @@ plot_ord <- eventReactive(input$renderplot_ord, {
   #A group is a must
   if(is.null(input$ord_group)) return(NULL)
   
-  amp_ordinate(loaded_data_subset(),
+  plotly <- amp_ordinate(loaded_data_subset(),
                type = input$ord_type,
                transform = input$ord_transform,
                distmeasure = input$ord_distmeasure,
@@ -144,24 +158,49 @@ plot_ord <- eventReactive(input$renderplot_ord, {
                sample_color_by = input$ord_group,
                sample_colorframe = TRUE,
                sample_colorframe_label = input$ord_group,
-               species_nlabels = ifelse(any(input$ord_type == c("pcoa", "nmds", "ca", "cca", "dca")), 0, input$ord_nspecies)
+               sample_plotly = ifelse(input$ord_plotlytype == "Samples", TRUE, FALSE),
+               species_plotly = ifelse(input$ord_plotlytype == "Species", TRUE, FALSE),
+               species_plot = ifelse(input$ord_plotlytype == "Species", TRUE, FALSE),
+               species_point_size = 2
                )
+  ggplot <- amp_ordinate(loaded_data_subset(),
+                       type = input$ord_type,
+                       transform = input$ord_transform,
+                       distmeasure = input$ord_distmeasure,
+                       constrain = input$ord_constrain,
+                       sample_color_by = input$ord_group,
+                       sample_colorframe = TRUE,
+                       sample_colorframe_label = input$ord_group
+  )
+  ggplot <- ggplot + theme(legend.position = "none")
+  return(list(plotly = plotly, ggplot = ggplot))
 })
   
-output$ord <- renderPlot({
-  plot_ord()
+output$ord <- renderPlotly({
+  plot_ord()[["plotly"]]
 })
 
 ################## Download feature ##################
-output$saveplot <- downloadHandler(
-  filename = function() {paste(input$plot_type, '.png', sep='') },
+#heatmap
+output$saveHeatmap <- downloadHandler(
+  filename = function() {paste(input$currentTab, '.pdf', sep='')},
   content = function(file) {
-    if(input$plot_type == "Heatmap" & !is.null(plot_heatmap())) {
-    ggsave(file, plot = plot_heatmap(), device = "png")
-    } else if (input$plot_type == "Ordination" & !is.null(plot_ord())) {
-      ggsave(file, plot = plot_ord(), device = "png")
-    } else if (input$plot_type == "Boxplot" & !is.null(plot_boxplot())) {
-      ggsave(file, plot = plot_boxplot(), device = "png")
-      } else return(NULL)
+    ggsave(file, plot = plot_heatmap(), device = "pdf", width = input$save_width_heatmap, height = input$save_height_heatmap)
+  }
+)
+
+#boxplot
+output$saveBoxplot <- downloadHandler(
+  filename = function() {paste(input$currentTab, '.pdf', sep='')},
+  content = function(file) {
+    ggsave(file, plot = plot_boxplot(), device = "pdf", width = input$save_width_boxplot, height = input$save_height_boxplot)
+  }
+)
+
+#ordination
+output$saveOrdination <- downloadHandler(
+  filename = function() {paste(input$currentTab, '.pdf', sep='')},
+  content = function(file) {
+    ggsave(file, plot = plot_ord()$ggplot, device = "pdf", width = input$save_width_ordination, height = input$save_height_ordination)
   }
 )

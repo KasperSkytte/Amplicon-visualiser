@@ -7,10 +7,15 @@ library(ggplot2)
 library(ggrepel)
 library(vegan)
 library(RColorBrewer)
+library(Cairo)
 library(data.table)
 library(stringr)
 library(dplyr)
 library(scales)
+library(plotly)
+#library(webshot)
+library(htmlwidgets)
+library(shinyjs)
 
 ######### Sourcefiles #########
 source("sourcefiles/choosedata_ui.R", local = FALSE)
@@ -27,7 +32,12 @@ source("sourcefiles/functions.R", local = FALSE)
 ######### User Interface #########
 navbarPage(
   title = h4(a(href="javascript:history.go(0)", style="color:#606060", "Amplicon Visualiser")),
+  windowTitle = "Amplicon Visualiser",
+  id = "currentTab",
   tabPanel("Data and Filtering", choosedata_sbp, choosedata_mp),
-  tabPanel("Analysis", plot_sbp, plot_mp),
-  windowTitle = "Amplicon Visualiser"
+  navbarMenu("Analysis",
+    ui_heatmap,
+    ui_boxplot,
+    ui_ordination
+  )
 )
