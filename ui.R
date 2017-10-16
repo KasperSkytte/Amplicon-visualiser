@@ -14,8 +14,9 @@ library(dplyr)
 library(scales)
 library(plotly)
 #library(webshot)
-library(htmlwidgets)
+#library(htmlwidgets)
 library(shinyjs)
+#library(shinythemes)
 
 ######### Sourcefiles #########
 source("sourcefiles/choosedata_ui.R", local = FALSE)
@@ -31,8 +32,9 @@ source("sourcefiles/functions.R", local = FALSE)
 
 ######### User Interface #########
 navbarPage(
-  title = h4(a(href="javascript:history.go(0)", style="color:#606060", "Amplicon Visualiser")),
+  title = h4(a(href = "https://github.com/KasperSkytte/Amplicon-visualiser", style = "color:#606060", icon("github")), a(href="javascript:history.go(0)", style="color:#606060", "Amplicon Visualiser")),
   windowTitle = "Amplicon Visualiser",
+  #theme = shinytheme("yeti"),
   id = "currentTab",
   tabPanel("Data and Filtering", choosedata_sbp, choosedata_mp),
   navbarMenu("Analysis",

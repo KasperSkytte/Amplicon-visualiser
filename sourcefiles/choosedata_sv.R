@@ -12,7 +12,7 @@ loaded_data <- reactive({
     
     objectNames <- load(file = file$datapath)
     loadedObjects <- mget(objectNames)
-    #check the data to contain otutable+metadata
+    #check the data
     if(!any(names(loadedObjects) == "metadata") | 
        !any(names(loadedObjects) == "otutable") | 
        !is.data.frame(loadedObjects[["metadata"]]) | 
@@ -69,17 +69,17 @@ loaded_data <- reactive({
       } else if(ext == "csv" | ext == "txt") {
         #Check which CSV separator and CSV decimal
         if(input$csvsep == "Tabular" & input$csvdec == "Dot '.'") {
-          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = "\t", dec = ".")
+          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = "\t", dec = ".")
         } else if(input$csvsep == "Tabular" & input$csvdec == "Comma ','") {
-          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = "\t", dec = ",")
+          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = "\t", dec = ",")
         } else if(input$csvsep == "Comma ','" & input$csvdec == "Dot '.'") {
-          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ",", dec = ".")
+          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = ",", dec = ".")
         } else if(input$csvsep == "Comma ','" & input$csvdec == "Comma ','") {
           stop("Separator and decimal must be different")
         } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Dot '.'") {
-          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ";", dec = ".")
+          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = ";", dec = ".")
         } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Comma ','") {
-          otutable <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ";", dec = ",")
+          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = ";", dec = ",")
         }
       } else stop("Only supports metadata from Microsoft Excel files or CSV files")
     }

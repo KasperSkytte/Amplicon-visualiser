@@ -67,7 +67,7 @@ choosedata_sbp <- sidebarPanel(
                 multiple = FALSE,
                 accept = c(".RData")
                 ),
-      helpText("Don't use the one file upload yet.")
+      helpText("The loaded .RData file must contain two dataframes named otutable and metadata.")
       #,uiOutput("loadedobjectslist")
     )
   )
