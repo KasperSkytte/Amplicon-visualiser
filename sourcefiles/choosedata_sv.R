@@ -66,7 +66,6 @@ loaded_data <- reactive({
         file.rename(file_metadata$datapath,
                     paste(file_metadata$datapath, ext, sep="."))
         metadata <- as.data.frame(read_excel(paste(file_metadata$datapath, ext, sep=".")), na = "")
-        metadata <- tibble::as.tibble(metadata, stringsAsFactors = TRUE)
       } else if(ext == "csv" | ext == "txt") {
         #Check which CSV separator and CSV decimal
         if(input$csvsep == "Tabular" & input$csvdec == "Dot '.'") {
@@ -84,6 +83,7 @@ loaded_data <- reactive({
         }
       } else stop("Only supports metadata from Microsoft Excel files or CSV files")
     }
+    metadata <- apply(metadata, 2, as.factor) #all columns to factors so it is possible to select more than one when searching in columns with DT
     loadedObjects <- amp_load(otutable, metadata)
   } else return(NULL)
   
