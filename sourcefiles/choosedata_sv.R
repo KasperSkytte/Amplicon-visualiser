@@ -66,6 +66,7 @@ loaded_data <- reactive({
         file.rename(file_metadata$datapath,
                     paste(file_metadata$datapath, ext, sep="."))
         metadata <- as.data.frame(read_excel(paste(file_metadata$datapath, ext, sep=".")), na = "")
+        metadata <- tibble::as.tibble(metadata, stringsAsFactors = TRUE)
       } else if(ext == "csv" | ext == "txt") {
         #Check which CSV separator and CSV decimal
         if(input$csvsep == "Tabular" & input$csvdec == "Dot '.'") {
