@@ -32,7 +32,7 @@ source("sourcefiles/functions.R", local = FALSE)
 
 ######### User Interface #########
 navbarPage(
-  title = h4(a(href = "https://github.com/KasperSkytte/Amplicon-visualiser", style = "color:#606060", icon("github")), a(href="javascript:history.go(0)", style="color:#606060", "Amplicon Visualiser")),
+  title = tagList(a(href = "https://github.com/KasperSkytte/Amplicon-visualiser", style = "color:#606060", icon("github"), a(href="javascript:history.go(0)", style="color:#606060", "Amplicon Visualiser"))),
   windowTitle = "Amplicon Visualiser",
   #theme = shinytheme("yeti"),
   id = "currentTab",

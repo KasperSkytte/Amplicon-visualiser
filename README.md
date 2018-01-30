@@ -7,7 +7,7 @@ Run in RStudio (as administrator) on your local computer for larger data sets:
 ```
 install.packages("shiny")
 install.packages("devtools")
-install.packages("Cairo") (For prettier plots)
+install.packages("Cairo") (For prettier plots on Linux/Mac)
 install.packages("tidyverse")
 
 shiny::runGitHub("amplicon-visualiser","kasperskytte")
