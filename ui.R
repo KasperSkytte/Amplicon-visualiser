@@ -19,7 +19,9 @@ pkgs <- c("shiny",
           "dplyr",
           "scales",
           "plotly",
-          "shinyjs")
+          "shinyjs",
+          "tidyverse",
+          "devtools")
 
 check.packages(pkgs)
 
