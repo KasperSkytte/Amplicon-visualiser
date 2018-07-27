@@ -5,14 +5,7 @@ Live at https://kasperskytte.shinyapps.io/shinyampvis/
 
 Run in RStudio (as administrator) on your local computer for larger data sets:
 ```
-install.packages("shiny")
-install.packages("devtools")
-install.packages("Cairo") (For prettier plots)
-install.packages("tidyverse")
-
+if(!require("shiny"))
+  install.packages("shiny")
 shiny::runGitHub("amplicon-visualiser","kasperskytte")
 ```
-
-If you get the error "there is no package 'packagename'" use `install.packages("packagename")` to install the required package(s). 
-
-Currently internal project on Aalborg University.
