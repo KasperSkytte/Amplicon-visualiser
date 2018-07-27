@@ -163,6 +163,7 @@ plot_ord <- eventReactive(input$renderplot_ord, {
                species_plot = ifelse(input$ord_plotlytype == "Species", TRUE, FALSE),
                species_point_size = 2
                )
+  plotly$elementId <- NULL
   ggplot <- amp_ordinate(loaded_data_subset(),
                        type = input$ord_type,
                        transform = input$ord_transform,
