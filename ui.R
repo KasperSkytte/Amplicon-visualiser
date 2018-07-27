@@ -1,32 +1,48 @@
 ######### Packages #########
-check.packages <- function(pkg){
-  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-  if (length(new.pkg)) 
-    install.packages(new.pkg, dependencies = TRUE)
-  sapply(pkg, require, character.only = TRUE)
+if(interactive()) {
+  check.packages <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg)) 
+      install.packages(new.pkg, dependencies = TRUE)
+    sapply(pkg, require, character.only = TRUE)
+  }
+  
+  pkgs <- c("shiny", 
+            "DT",
+            "readxl",
+            "ggplot2",
+            "ggrepel",
+            "vegan",
+            "RColorBrewer",
+            "Cairo",
+            "data.table",
+            "stringr",
+            "dplyr",
+            "scales",
+            "plotly",
+            "shinyjs",
+            "tidyverse",
+            "devtools")
+  check.packages(pkgs)
 }
 
-pkgs <- c("shiny", 
-          "DT",
-          "readxl",
-          "ggplot2",
-          "ggrepel",
-          "vegan",
-          "RColorBrewer",
-          "Cairo",
-          "data.table",
-          "stringr",
-          "dplyr",
-          "scales",
-          "plotly",
-          "shinyjs",
-          "tidyverse",
-          "devtools")
+library(shiny) 
+library(DT)
+library(readxl)
 
-check.packages(pkgs)
-
+library(ggplot2)
+library(ggrepel)
+library(vegan)
+library(RColorBrewer)
+library(Cairo)
+library(data.table)
+library(stringr)
+library(dplyr)
+library(scales)
+library(plotly)
 #library(webshot)
 #library(htmlwidgets)
+library(shinyjs)
 #library(shinythemes)
 
 ######### Sourcefiles #########
