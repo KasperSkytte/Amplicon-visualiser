@@ -11,64 +11,35 @@ choosedata_sbp <- sidebarPanel(
                selected = "MiDAS example data"
   ),
   conditionalPanel(
+    condition = "input.chosendata == 'MiDAS example data'",
+    helpText("The MiDAS example data contains 16S rRNA amplicon sequencing data from 23 Danish wastewater treatment plants sampled a few times a year in 2014-2014. See ", a("http://midasfieldguide.org", href = "http://midasfieldguide.org"))
+  ),
+  conditionalPanel(
     condition = "input.chosendata == 'Upload data'",
     tags$hr(),
     h4("Upload data"),
-    radioButtons(inputId = "upl_type",
-                 label = "",
-                 choices = c("Two files (metadata and OTU table)", "One file (.RData)")
-                 ),
-    conditionalPanel(
-      condition = "input.upl_type == 'Two files (metadata and OTU table)'",
-      #Upload metadata and otutable separately
-      fileInput(inputId = "upl_metadata",
-                label = "Metadata (.xlsx/.csv)",
-                multiple = FALSE,
-                accept = c(".xlsx", ".xls", ".csv")
-                ),
-      fileInput(inputId = "upl_otutable",
-                label = "OTU table  (.txt/.csv)",
-                multiple = FALSE,
-                accept = c(".txt", ".csv")
-                ),
-      tags$hr(),
-      selectInput(inputId = "csvsep",
-                  label = "CSV separator",
-                  multiple = FALSE,
-                  choices = c("Tabular", "Comma ','", "Semicolon ';'"),
-                  selected = "Tabular"
-                  ),
-      selectInput(inputId = "csvdec",
-                  label = "CSV decimal",
-                  multiple = FALSE,
-                  choices = c("Dot '.'", "Comma ','"),
-                  selected = "Dot"
-                  ),
-      tags$hr(),
-      helpText("If you get an error it either means you have chosen the wrong separator or the metadata does not match the OTU table. Uploading metadata is not required but recommended."),
-      helpText("The metadata must contain sample ID's in the first column matching the sample ID's in the first row of the OTU table. The last 7 columns of the OTU table must be the taxonomy matching the OTU's (Kingdom -> Species)."),
-      tags$b("Minimal examples of both files are available here:"),
-      tags$br(),
-      downloadLink(
-        outputId = "dlexamplemetadata",
-        label = "metadata.xlsx"
-      ),
-      tags$br(),
-      downloadLink(
-        outputId = "dlexampleotutable",
-        label = "otutable.csv"
-      )
-      ),
-    #Upload metadata and otutable in one .RData file
-    conditionalPanel(
-      condition = "input.upl_type == 'One file (.RData)'",
-      fileInput(inputId = "upl_rdata",
-                label = "Choose file (.RData)",
-                multiple = FALSE,
-                accept = c(".RData")
-                ),
-      helpText("The loaded .RData file must contain two dataframes named otutable and metadata.")
-      #,uiOutput("loadedobjectslist")
+    #Upload metadata and otutable separately
+    fileInput(inputId = "upl_metadata",
+              label = "Metadata (.xls(x)/.csv/.txt)",
+              multiple = FALSE,
+              accept = c(".xlsx", ".xls", ".csv", ".txt")
+    ),
+    fileInput(inputId = "upl_otutable",
+              label = "OTU table  (.txt/.csv/.txt)",
+              multiple = FALSE,
+              accept = c(".txt", ".csv")
+    ),
+    helpText("The metadata must contain sample ID's in the first column matching the sample ID's in the first row of the OTU table. The last 7 columns of the OTU table must be the taxonomy matching the OTU's (Kingdom -> Species)."),
+    tags$b("Minimal examples of both files are available here:"),
+    tags$br(),
+    downloadLink(
+      outputId = "dlexamplemetadata",
+      label = "metadata.xlsx"
+    ),
+    tags$br(),
+    downloadLink(
+      outputId = "dlexampleotutable",
+      label = "otutable.csv"
     )
   )
 )

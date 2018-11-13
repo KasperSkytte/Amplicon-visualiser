@@ -3,33 +3,7 @@ loaded_data <- reactive({
   if (input$chosendata == "MiDAS example data") {
     load("MiDAS_1.21.RData")
     loadedObjects <- MiDAS_1.21
-    } else if(input$chosendata == "Upload data" & input$upl_type == "One file (.RData)") {
-    file <- input$upl_rdata
-    
-    #HALT if the file is not uploaded!
-    if (is.null(file))
-      return(NULL)
-    
-    objectNames <- load(file = file$datapath)
-    loadedObjects <- mget(objectNames)
-    #check the data
-    if(!any(names(loadedObjects) == "metadata") | 
-       !any(names(loadedObjects) == "otutable") | 
-       !is.data.frame(loadedObjects[["metadata"]]) | 
-       !is.data.frame(loadedObjects[["otutable"]])) {
-      stop("The .RData file must contain two dataframes with the exact names: 'otutable' and 'metadata'")
-    }
-    loadedObjects <- amp_load(loadedObjects$otutable, loadedObjects$metadata)
-    #at some point it will be made so that the uploaded RData contains many objects loaded with amp_load which should be listed here
-    #list of R objects if single file upload
-    #output$loadedobjectslist <- renderUI({
-    #  if(input$chosendata == "Upload data" & input$upl_type == "One file (.RData)") {
-    #    selectInput(inputId = "loadedobjectslist",
-    #                label = "Select an R object",
-    #                choices = "loadedObjects")
-    #  }
-    #})
-  } else if(input$chosendata == "Upload data" & input$upl_type == "Two files (metadata and OTU table)") {
+    } else if(input$chosendata == "Upload data") {
     file_otutable <- input$upl_otutable
     file_metadata <- input$upl_metadata
     
@@ -38,20 +12,10 @@ loaded_data <- reactive({
       return(NULL)
     
     #load otutable
-    #Check which CSV separator and CSV decimal
-    if(input$csvsep == "Tabular" & input$csvdec == "Dot '.'") {
-      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = "\t", dec = ".")
-    } else if(input$csvsep == "Tabular" & input$csvdec == "Comma ','") {
-      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = "\t", dec = ",")
-    } else if(input$csvsep == "Comma ','" & input$csvdec == "Dot '.'") {
-      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ",", dec = ".")
-    } else if(input$csvsep == "Comma ','" & input$csvdec == "Comma ','") {
-      stop("Separator and decimal must be different")
-    } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Dot '.'") {
-      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ";", dec = ".")
-    } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Comma ','") {
-      otutable <- read.csv2(file_otutable$datapath, header = TRUE, check.names = FALSE, row.names = 1, sep = ";", dec = ",")
-    }
+    otutable <- data.table::fread(file_otutable$datapath,
+                                  header = TRUE, 
+                                  check.names = FALSE,
+                                  fill = TRUE)
     
     #load metadata
     #if no metadata is uploaded, create dummy metadata
@@ -62,30 +26,22 @@ loaded_data <- reactive({
     } else if(!is.null(file_metadata)) {
       #check file extension
       ext <- tools::file_ext(file_metadata$name)
-      if(ext == "xlsx" | ext == "xls") {
+      if(ext %in% c("xlsx", "xls")) {
         file.rename(file_metadata$datapath,
                     paste(file_metadata$datapath, ext, sep="."))
         metadata <- as.data.frame(read_excel(paste(file_metadata$datapath, ext, sep=".")), na = "")
-      } else if(ext == "csv" | ext == "txt") {
-        #Check which CSV separator and CSV decimal
-        if(input$csvsep == "Tabular" & input$csvdec == "Dot '.'") {
-          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = "\t", dec = ".")
-        } else if(input$csvsep == "Tabular" & input$csvdec == "Comma ','") {
-          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = "\t", dec = ",")
-        } else if(input$csvsep == "Comma ','" & input$csvdec == "Dot '.'") {
-          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = ",", dec = ".")
-        } else if(input$csvsep == "Comma ','" & input$csvdec == "Comma ','") {
-          stop("Separator and decimal must be different")
-        } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Dot '.'") {
-          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = ";", dec = ".")
-        } else if(input$csvsep == "Semicolon ';'" & input$csvdec == "Comma ','") {
-          metadata <- read.csv2(file_metadata$datapath, header = TRUE, check.names = FALSE,  sep = ";", dec = ",")
-        }
-      } else stop("Only supports metadata from Microsoft Excel files or CSV files")
+      } else if (ext %in% c("txt", "csv")) {
+        metadata <- data.table::fread(file_metadata$datapath, 
+                                      header = TRUE,
+                                      check.names = FALSE,  
+                                      fill = TRUE)
+      } else
+        stop("Only supports metadata from Microsoft Excel files or flat delimited text files")
     }
-    metadata <- apply(metadata, 2, as.factor) #all columns to factors so it is possible to select more than one when searching in columns with DT
+    metadata <- mutate_all(metadata, as.factor) #all columns to factors so it is possible to select more than one when searching in columns with DT
     loadedObjects <- amp_load(otutable, metadata)
-  } else return(NULL)
+  } else 
+    return(NULL)
   
   #return the loaded data list
   return(loadedObjects)
