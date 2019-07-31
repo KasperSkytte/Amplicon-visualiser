@@ -1,4 +1,5 @@
 ######### Packages #########
+options("repos" = c(getOption("repos"), "https://bioconductor.org/packages/3.9/bioc"))
 if(interactive()) {
   check.packages <- function(pkg){
     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
@@ -22,14 +23,15 @@ if(interactive()) {
             "plotly",
             "shinyjs",
             "tidyverse",
-            "devtools")
+            "devtools",
+            "biomformat")
   check.packages(pkgs)
 }
 
 library(shiny) 
 library(DT)
 library(readxl)
-
+library(biomformat)
 library(ggplot2)
 library(ggrepel)
 library(vegan)
@@ -40,16 +42,16 @@ library(stringr)
 library(dplyr)
 library(scales)
 library(plotly)
-#library(webshot)
-#library(htmlwidgets)
 library(shinyjs)
-#library(shinythemes)
 
 ######### Sourcefiles #########
 source("sourcefiles/choosedata_ui.R", local = FALSE)
 source("sourcefiles/plot_ui.R", local = FALSE)
 source("sourcefiles/functions.R", local = FALSE)
 
+#source from github
+devtools::source_url("https://raw.githubusercontent.com/MadsAlbertsen/ampvis2/fdecef9b2ef0e193d3d44b307c213990929037c7/R/amp_import_biom.R") #from 2019/05/13
+devtools::source_url("https://raw.githubusercontent.com/MadsAlbertsen/ampvis2/0be79ce3c81fb0715371ffd564b724f214e0340e/R/amp_import_usearch.R") #from 2019/03/19
 #Source ampvis2 functions from github release 2.2.5
 #devtools::source_url("https://raw.githubusercontent.com/MadsAlbertsen/ampvis2/2.2.5/R/amp_load.R")
 #devtools::source_url("https://raw.githubusercontent.com/MadsAlbertsen/ampvis2/2.2.5/R/amp_rename.R")

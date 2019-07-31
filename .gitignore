@@ -6,3 +6,4 @@
 *.Rproj
 
 *.dcf
+packrat/lib*/

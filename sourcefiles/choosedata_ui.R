@@ -12,34 +12,53 @@ choosedata_sbp <- sidebarPanel(
   ),
   conditionalPanel(
     condition = "input.chosendata == 'MiDAS example data'",
-    helpText("The MiDAS example data contains 16S rRNA amplicon sequencing data from 23 Danish wastewater treatment plants sampled a few times a year in 2014-2014. See ", a("http://midasfieldguide.org", href = "http://midasfieldguide.org"))
+    helpText("The MiDAS example data contains 16S rRNA amplicon sequencing data from 23 Danish wastewater treatment plants sampled a few times a year in 2014-2015. See ", a("http://midasfieldguide.org", href = "http://midasfieldguide.org"))
   ),
   conditionalPanel(
     condition = "input.chosendata == 'Upload data'",
     tags$hr(),
-    h4("Upload data"),
-    #Upload metadata and otutable separately
     fileInput(inputId = "upl_metadata",
-              label = "Metadata (.xls(x)/.csv/.txt)",
+              label = "Sample metadata (.xls(x)/.csv/.tsv/.txt)",
               multiple = FALSE,
-              accept = c(".xlsx", ".xls", ".csv", ".txt")
+              accept = c(".xlsx", ".xls", ".csv", ".txt", ".tsv")
     ),
-    fileInput(inputId = "upl_otutable",
-              label = "OTU table  (.txt/.csv/.txt)",
-              multiple = FALSE,
-              accept = c(".txt", ".csv")
-    ),
-    helpText("The metadata must contain sample ID's in the first column matching the sample ID's in the first row of the OTU table. The last 7 columns of the OTU table must be the taxonomy matching the OTU's (Kingdom -> Species)."),
-    tags$b("Minimal examples of both files are available here:"),
+    helpText("The metadata must be a table where sample ID's matching the sample ID's in the OTU table are in the first column. The metadata can contain any number of variables."),
+    tags$b("Minimal example is available here:"),
     tags$br(),
     downloadLink(
       outputId = "dlexamplemetadata",
       label = "metadata.xlsx"
     ),
-    tags$br(),
-    downloadLink(
-      outputId = "dlexampleotutable",
-      label = "otutable.csv"
+    tags$hr(),
+    h5(tags$b("OTU table and taxonomy")),
+    fileInput(inputId = "upl_otutable",
+              label = "",
+              multiple = FALSE,
+              accept = c(".txt", ".csv", ".biom", ".tsv")
+    ),
+    radioButtons(inputId = "upl_data_type",
+                 label = "Format",
+                 choices = c("BIOM format" = "biom",
+                             "usearch",
+                             "Text file" = "text"),
+                 selected = "biom"),
+    conditionalPanel(
+      condition = "input.upl_data_type == 'usearch'",
+      helpText("With usearch the OTU table and taxonomy are in two separate files; OTU table is a CSV file and the taxonomy is in a .sintax file."),
+      fileInput(inputId = "upl_sintax",
+                label = "Sintax file",
+                multiple = FALSE,
+                accept = c(".sintax"))
+    ),
+    conditionalPanel(
+      condition = "input.upl_data_type == 'text'",
+      helpText("If the OTU table is a text or CSV file, the last 7 columns of the OTU table must be the taxonomy matching the OTU's (Kingdom -> Species)."),
+      tags$b("Minimal example is available here:"),
+      tags$br(),
+      downloadLink(
+        outputId = "dlexampleotutable",
+        label = "otutable.csv"
+      )
     )
   )
 )

@@ -6,16 +6,35 @@ loaded_data <- reactive({
     } else if(input$chosendata == "Upload data") {
     file_otutable <- input$upl_otutable
     file_metadata <- input$upl_metadata
+    file_sintax <- input$upl_sintax
     
     #stop if no otutable uploaded!
     if (is.null(file_otutable))
       return(NULL)
     
     #load otutable
-    otutable <- data.table::fread(file_otutable$datapath,
-                                  header = TRUE, 
-                                  check.names = FALSE,
-                                  fill = TRUE)
+    otutable_ext <- tolower(tools::file_ext(file_otutable$name))
+    if(input$upl_data_type %in% "biom" & 
+       otutable_ext %in% "biom") {
+      otutable <- amp_import_biom(file_otutable$datapath)
+    } else if(input$upl_data_type %in% "text" &
+              otutable_ext %in% c("txt", "csv", "tsv")) {
+      otutable <- data.table::fread(
+        file_otutable$datapath,
+        header = TRUE, 
+        check.names = FALSE,
+        fill = TRUE)
+    } else if(input$upl_data_type %in% "usearch" & 
+             otutable_ext %in% c("txt", "csv", "tsv") &
+             !is.null(file_sintax)) {
+      if(tolower(tools::file_ext(file_sintax$name)) %in% "sintax")
+        otutable <- amp_import_usearch(
+          otutab = file_otutable$datapath,
+          sintax = file_sintax$datapath)
+      else
+        return(NULL)
+    } else
+      return(NULL)
     
     #load metadata
     #if no metadata is uploaded, create dummy metadata
@@ -25,12 +44,12 @@ loaded_data <- reactive({
       warning("No metadata provided, dummy metadata created.")
     } else if(!is.null(file_metadata)) {
       #check file extension
-      ext <- tools::file_ext(file_metadata$name)
+      ext <- tolower(tools::file_ext(file_metadata$name))
       if(ext %in% c("xlsx", "xls")) {
         file.rename(file_metadata$datapath,
                     paste(file_metadata$datapath, ext, sep="."))
         metadata <- as.data.frame(read_excel(paste(file_metadata$datapath, ext, sep=".")), na = "")
-      } else if (ext %in% c("txt", "csv")) {
+      } else if (ext %in% c("txt", "csv", "tsv")) {
         metadata <- data.table::fread(file_metadata$datapath, 
                                       header = TRUE,
                                       check.names = FALSE,  
