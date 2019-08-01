@@ -1,5 +1,4 @@
 ######### Packages #########
-options("repos" = c(getOption("repos"), "https://bioconductor.org/packages/3.9/bioc"))
 if(interactive()) {
   check.packages <- function(pkg){
     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
@@ -23,9 +22,15 @@ if(interactive()) {
             "plotly",
             "shinyjs",
             "tidyverse",
-            "devtools",
-            "biomformat")
+            "devtools")
   check.packages(pkgs)
+  
+  #github packages (to avoid bioconductor)
+  if(!require("biomformat")) {
+    devtools::install_github("KasperSkytte/Rhdf5lib")
+    devtools::install_github("KasperSkytte/rhdf5")
+    devtools::install_github("KasperSkytte/biomformat")
+  }
 }
 
 library(shiny) 
