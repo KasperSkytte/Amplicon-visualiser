@@ -14,7 +14,6 @@ if(interactive()) {
             "ggrepel",
             "vegan",
             "RColorBrewer",
-            "Cairo",
             "data.table",
             "stringr",
             "dplyr",
@@ -41,7 +40,6 @@ library(ggplot2)
 library(ggrepel)
 library(vegan)
 library(RColorBrewer)
-library(Cairo)
 library(data.table)
 library(stringr)
 library(dplyr)
