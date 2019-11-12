@@ -53,7 +53,7 @@ source("sourcefiles/plot_ui.R", local = FALSE)
 source("sourcefiles/functions.R", local = FALSE)
 
 #source from github
-devtools::source_url("https://raw.githubusercontent.com/MadsAlbertsen/ampvis2/fdecef9b2ef0e193d3d44b307c213990929037c7/R/amp_import_biom.R") #from 2019/05/13
+devtools::source_url("https://raw.githubusercontent.com/MadsAlbertsen/ampvis2/4e3d8d4f7b82c85b468ec0fd5d1ad926d6498c7b/R/amp_import_biom.R") #from 2019/10/30
 devtools::source_url("https://raw.githubusercontent.com/MadsAlbertsen/ampvis2/0be79ce3c81fb0715371ffd564b724f214e0340e/R/amp_import_usearch.R") #from 2019/03/19
 #Source ampvis2 functions from github release 2.2.5
 #devtools::source_url("https://raw.githubusercontent.com/MadsAlbertsen/ampvis2/2.2.5/R/amp_load.R")
@@ -70,6 +70,7 @@ navbarPage(
   id = "currentTab",
   tabPanel("Data and Filtering", choosedata_sbp, choosedata_mp),
   navbarMenu("Analysis",
+    ui_alphadiv,
     ui_heatmap,
     ui_boxplot,
     ui_ordination

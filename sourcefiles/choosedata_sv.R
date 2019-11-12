@@ -1,8 +1,8 @@
 ################## Load data ##################
 loaded_data <- reactive({
   if (input$chosendata == "MiDAS example data") {
-    load("MiDAS_1.21.RData")
-    loadedObjects <- MiDAS_1.21
+    load("AalborgWWTPs.RData")
+    loadedObjects <- AalborgWWTPs
     } else if(input$chosendata == "Upload data") {
     file_otutable <- input$upl_otutable
     file_metadata <- input$upl_metadata
@@ -145,5 +145,7 @@ loaded_data_subset <- reactive({
   } else if(!is.null(c(input$filtertaxa_rows_all))) {
     newlist <- list(abund = newabund, tax = newtax, metadata = newmetadata)
   }
+  class(newlist) <- "ampvis2"
+  hest <<- newlist
   return(newlist)
 })

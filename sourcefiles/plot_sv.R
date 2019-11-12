@@ -69,6 +69,85 @@ output$heatmap <- renderPlot({
   plot_heatmap()
 })
 
+################## Alpha-diversity ##################
+output$alphadiv_options <- renderUI({
+  #find char and factor columns, remove sampleID column
+  cols2keep <- unlist(
+    lapply(loaded_data_subset()[["metadata"]][-1], 
+           function(x) {
+             is.character(x) | is.factor(x)
+           }), 
+    use.names = FALSE)
+  choices <- c("All samples",
+               "Individual samples (scatter plot)",
+               colnames(loaded_data_subset()[["metadata"]])[c(FALSE, cols2keep)])
+  selectInput(
+    inputId = "alphadiv_group_by",
+    label = "Group by",
+    choices = choices,
+    selected = "Individual samples"
+  )
+})
+
+output$alphadiv_rarefy <- renderUI({
+  reads <- colSums(loaded_data_subset()[["abund"]])
+  numericInput(
+    inputId = "alphadiv_rarefy",
+    label = "Rarefy samples to even depth",
+    value = max(reads),
+    min = 1L,
+    max = max(reads),
+    step = 1L
+  )
+})
+
+calcAlphadiv <- reactive({
+  shiny::req(input$alphadiv_rarefy)
+  res <- amp_alphadiv(
+    loaded_data_subset(), 
+    rarefy = input$alphadiv_rarefy,
+    richness = TRUE)
+  return(res)
+})
+
+output$alphadiv_plot <- renderPlot({
+  shiny::req(input$alphadiv_measure)
+  calcAlphadiv() %>%
+    tidyr::gather(key = "index", 
+                  value = "value",
+                  Reads, 
+                  ObservedOTUs,
+                  Shannon, 
+                  Simpson,
+                  invSimpson,
+                  Chao1,
+                  ACE) %>% 
+    dplyr::filter(index %in% input$alphadiv_measure) %>% {
+      .$index <- factor(.$index, levels = c("Shannon", "Simpson", "invSimpson", "Chao1", "ACE", "ObservedOTUs", "Reads"))
+      return(.)
+    } %>% 
+    mutate("All samples" = "All samples") %>% 
+    ggplot(aes_q(x = switch((input$alphadiv_group_by == "Individual samples (scatter plot)") + 1L,
+                            sym(input$alphadiv_group_by),
+                            sym(names(.)[1])),
+                 y = .$value,
+                 group = switch((input$alphadiv_group_by == "Individual samples (scatter plot)") + 1L, 
+                                sym(input$alphadiv_group_by),
+                                NULL))) + {
+                                  if(input$alphadiv_group_by != "Individual samples (scatter plot)")
+                                    geom_boxplot()
+                                  else if(input$alphadiv_group_by == "Individual samples (scatter plot)")
+                                    geom_point()
+                                } +
+    facet_wrap(~index, nrow = 1, scales = "free_y") +
+    theme_minimal() +
+    theme(strip.background = element_rect(colour = NA, fill = "grey95"), 
+          panel.grid.minor = element_blank(),
+          strip.text = element_text(size = 10),
+          axis.text.x = element_text(angle = 90),
+          axis.title = element_blank())
+})
+
 ################## Boxplot ##################
 output$boxplot_UI_group_by <- renderUI({
   selectInput(

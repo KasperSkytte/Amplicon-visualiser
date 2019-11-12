@@ -162,6 +162,35 @@ ui_boxplot <- tabPanel("Boxplot",
                          plotOutput("boxplot", height = 800)
                          )
 )
+######### ALPHADIV UI #########
+ui_alphadiv <- tabPanel("Alpha diversity", 
+                       sidebarPanel(
+                         width = 3,
+                         position = "left",
+                         h4("Alpha diversity"),
+                         tags$hr(),
+                         uiOutput("alphadiv_options"),
+                         selectInput(
+                           inputId = "alphadiv_measure",
+                           label = "Measure(s)",
+                           choices = c("Shannon",
+                                       "Simpson",
+                                       "invSimpson",
+                                       "Chao1 (richness)" = "Chao1",
+                                       "ACE (richness)" = "ACE",
+                                       "ObservedOTUs",
+                                       "Reads"),
+                           selected = c("Shannon", "Simpson", "invSimpson"),
+                           multiple = TRUE
+                         ),
+                         uiOutput("alphadiv_rarefy"),
+                         helpText("Note: The results are calculated after filters have been applied in the side menu to the left, if any.")
+                       ),
+                       mainPanel(
+                         width = 9,
+                         plotOutput("alphadiv_plot", height = "500px", width = "700px")
+                       )
+)
 
 ######### ORDINATION UI #########
 ui_ordination <- tabPanel("Ordination", 

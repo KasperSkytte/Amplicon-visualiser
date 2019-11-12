@@ -12,7 +12,7 @@ choosedata_sbp <- sidebarPanel(
   ),
   conditionalPanel(
     condition = "input.chosendata == 'MiDAS example data'",
-    helpText("The MiDAS example data contains 16S rRNA amplicon sequencing data from 23 Danish wastewater treatment plants sampled a few times a year in 2014-2015. See ", a("http://midasfieldguide.org", href = "http://midasfieldguide.org"))
+    helpText("The MiDAS example data contains 16S rRNA amplicon sequencing data from 2 Danish wastewater treatment plants, Aalborg West and Aalborg East, sampled a few times a year in 2014-2015. See ", a("http://midasfieldguide.org", href = "http://midasfieldguide.org"))
   ),
   conditionalPanel(
     condition = "input.chosendata == 'Upload data'",
